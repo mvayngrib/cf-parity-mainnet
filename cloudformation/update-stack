@@ -1,4 +1,4 @@
-PARAMS=${1-stack-parameters.json}
+PARAMS=${1-stack-parameters-update.json}
 STACK_NAME=${2-MainnetParity}
 aws cloudformation update-stack \
   --stack-name $STACK_NAME \

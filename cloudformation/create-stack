@@ -1,4 +1,4 @@
-PARAMS=${1-stack-parameters.json}
+PARAMS=${1-stack-parameters-create.json}
 STACK_NAME=${2-MainnetParity}
 aws cloudformation create-stack \
   --stack-name $STACK_NAME \

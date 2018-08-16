@@ -1,0 +1,26 @@
+[
+  {
+    "ParameterKey": "VpcId",
+    "ParameterValue": "vpc-51359736"
+  },
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "c5.large"
+  },
+  {
+    "ParameterKey": "VolumeType",
+    "ParameterValue": "io1"
+  },
+  {
+    "ParameterKey": "Iops",
+    "ParameterValue": "2500"
+  },
+  {
+    "ParameterKey": "DNSName",
+    "ParameterValue": "ethmainnet1.mvayngrib.com"
+  },
+  {
+    "ParameterKey": "DesiredTaskCount",
+    "ParameterValue": "1"
+  }
+]
