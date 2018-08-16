@@ -25,6 +25,18 @@ Parameters:
   DesiredTaskCount:
     Type: Number
     Default: 1
+  VolumeType:
+    Type: String
+    Default: gp2
+    AllowedValues:
+      - io1
+      - gp2
+      - st1
+      - sc1
+  Iops:
+    Type: Number
+    Default: 300
+
 Mappings:
   AWSRegionToAMI:
     us-east-2:
@@ -194,7 +206,8 @@ Resources:
             - !Ref ChainSnapshotId
             - !Ref "AWS::NoValue"
           VolumeSize: '100'
-          VolumeType: gp2
+          VolumeType: !Ref VolumeType
+          Iops: !Ref Iops
       UserData:
         "Fn::Base64": !Sub |
           #!/bin/bash
