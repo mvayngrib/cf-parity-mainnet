@@ -1,5 +1,5 @@
 PARAMS=${1-stack-parameters-create.json}
-STACK_NAME=${2-MainnetParity}
+STACK_NAME=${2-MainnetParity1}
 aws cloudformation create-stack \
   --stack-name $STACK_NAME \
   --template-body file://`pwd`/service-template.yml \

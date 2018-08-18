@@ -46,6 +46,6 @@ fi
 
 BUILD_PATH=./docker
 `aws ecr get-login --no-include-email`
-TAG="$REPO_URL:latest"
+TAG="$REPO_URL:autoupdater"
 build $TAG $BUILD_PATH
 upload $TAG

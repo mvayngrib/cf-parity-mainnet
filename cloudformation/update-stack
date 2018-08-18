@@ -1,5 +1,5 @@
 PARAMS=${1-stack-parameters-update.json}
-STACK_NAME=${2-MainnetParity}
+STACK_NAME=${2-MainnetParity1}
 aws cloudformation update-stack \
   --stack-name $STACK_NAME \
   --template-body file://`pwd`/service-template.yml \

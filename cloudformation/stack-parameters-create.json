@@ -4,16 +4,28 @@
     "ParameterValue": "vpc-51359736"
   },
   {
-    "ParameterKey": "InstanceType",
+    "ParameterKey": "SyncInstanceType",
     "ParameterValue": "c5.large"
   },
   {
-    "ParameterKey": "VolumeType",
+    "ParameterKey": "PostSyncInstanceType",
+    "ParameterValue": "t2.medium"
+  },
+  {
+    "ParameterKey": "SyncVolumeType",
     "ParameterValue": "io1"
   },
   {
-    "ParameterKey": "Iops",
+    "ParameterKey": "PostSyncVolumeType",
+    "ParameterValue": "gp2"
+  },
+  {
+    "ParameterKey": "SyncIops",
     "ParameterValue": "2500"
+  },
+  {
+    "ParameterKey": "PostSyncIops",
+    "ParameterValue": "300"
   },
   {
     "ParameterKey": "DNSName",
