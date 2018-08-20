@@ -29,10 +29,14 @@
   },
   {
     "ParameterKey": "DNSName",
-    "ParameterValue": "ethmainnet1.mvayngrib.com"
+    "ParameterValue": "ethmainnet2.mvayngrib.com"
   },
   {
     "ParameterKey": "DesiredTaskCount",
     "ParameterValue": "1"
+  },
+  {
+    "ParameterKey": "KeyName",
+    "ParameterValue": "micro1"
   }
 ]

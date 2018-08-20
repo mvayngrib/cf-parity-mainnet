@@ -7,4 +7,4 @@ WORKDIR /eth-env
 
 ENTRYPOINT []
 
-CMD /eth-env/run-parity.sh
+CMD ./run-parity.sh

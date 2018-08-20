@@ -54,6 +54,9 @@ Parameters:
   VolumeSize:
     Type: Number
     Default: 100
+  SyncToBlock:
+    Type: Number
+    Default: 0
 
 Mappings:
   AWSRegionToAMI:
@@ -152,6 +155,7 @@ Resources:
               - ecr:GetAuthorizationToken
               - ec2:DescribeInstanceStatus
               - ec2:DescribeVolumes
+              - ec2:DescribeSnapshots
               - ec2:CreateSnapshot
               - logs:CreateLogStream
               - logs:CreateLogGroup
@@ -259,10 +263,11 @@ Resources:
             04_mount:
               command: "mount /dev/sdh /data"
               test: "! mountpoint -q /data"
-            05_register_dns:
-              command: "bash -x /home/ec2-user/register-dns"
-            06_update_stack_on_sync:
-              command: !If [ Synced, "echo 'not updating stack on sync'", "bash -x /home/ec2-user/update-stack-on-sync"]
+            # 05_register_dns:
+            #   command: "bash -x /home/ec2-user/register-dns"
+            05_update_stack_on_sync:
+              command: !If [Synced, "echo 'not updating stack on sync'", "bash -x /home/ec2-user/update-stack-on-sync"]
+
           files:
             "/etc/cfn/cfn-hup.conf":
               mode: "000400"
@@ -340,15 +345,16 @@ Resources:
                         }
                     ]
                 }
-            "/home/ec2-user/register-dns":
-              mode: "000400"
-              owner: ec2-user
-              group: ec2-user
-              content: !Sub |
-                cd /home/ec2-user
-                LOCAL_IP=`curl http://169.254.169.254/latest/meta-data/local-ipv4`
-                sed -e s/{local_ipv4}/$LOCAL_IP/g change-record-set.json.tmpl > change-record-set.json
-                aws route53 change-resource-record-sets --hosted-zone-id ${HostedZone} --change-batch file:///home/ec2-user/change-record-set.json
+
+            # "/home/ec2-user/register-dns":
+            #   mode: "000400"
+            #   owner: ec2-user
+            #   group: ec2-user
+            #   content: !Sub |
+            #     cd /home/ec2-user
+            #     LOCAL_IP=`curl http://169.254.169.254/latest/meta-data/local-ipv4`
+            #     sed -e s/{local_ipv4}/$LOCAL_IP/g change-record-set.json.tmpl > change-record-set.json
+            #     aws route53 change-resource-record-sets --hosted-zone-id ${HostedZone} --change-batch file:///home/ec2-user/change-record-set.json
 
             "/home/ec2-user/update-stack-on-sync":
               mode: "000400"
@@ -356,21 +362,24 @@ Resources:
               group: ec2-user
               content: !Sub |
                 set -x
-                set -euo pipefail
+                # set -euo pipefail
 
                 export AWS_DEFAULT_REGION="${AWS::Region}"
 
-                STACK_NAME="${AWS::StackId}"
+                TARGET_BLOCK="${SyncToBlock}"
+                STACK_NAME="${AWS::StackName}"
                 LOCAL_IP=$(curl http://169.254.169.254/latest/meta-data/local-ipv4)
                 AWS_INSTANCE_ID=$(curl http://169.254.169.254/latest/meta-data/instance-id)
-                ROOT_DISK_ID=$(aws ec2 describe-volumes --filter "Name=attachment.instance-id, Values=$AWS_INSTANCE_ID" --query "Volumes[].VolumeId" --out text)
+                ROOT_DISK_ID=$(aws ec2 describe-volumes --filter "Name=attachment.instance-id, Values=$AWS_INSTANCE_ID" | \
+                  jq -r '.Volumes[] | select(.Attachments[].Device == "/dev/sdh") | .VolumeId')
+
                 BLOCK_ZERO_RESP='{"result":"0x0"}'
 
                 poll() {
                   RESULT=$(curl -X POST -H 'Content-Type: application/json' \
                     --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":83}' \
                     "$LOCAL_IP:8545" || echo "$BLOCK_ZERO_RESP")
-                  BLOCK_HEX=$(echo $RESULT | jq .result -r | cut -c2-) # cut off 0x prefix
+                  BLOCK_HEX=$(echo $RESULT | jq .result -r | cut -c3-) # cut off 0x prefix
                   echo $(( 16#$BLOCK_HEX ))
                 }
 
@@ -381,7 +390,7 @@ Resources:
                   do
                     CURRENT_BLOCK=$(poll)
                     echo "CURRENT BLOCK: $CURRENT_BLOCK"
-                    if [ "$CURRENT_BLOCK" >= "$1" ];
+                    if [[ "$CURRENT_BLOCK" -ge "$1" ]];
                     then
                       echo "SYNC COMPLETE!"
                       break
@@ -391,9 +400,19 @@ Resources:
                   done
                 }
 
-                # accepts args: region, stack name
+                # accepts arg: target block, stack name
                 get_update_stack_params() {
                   echo "taking snapshot of EBS volume: $ROOT_DISK_ID"
+                  TARGET_BLOCK="$1"
+                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name "$2" | \
+                    jq '[.Stacks[] | select(.StackStatus=="UPDATE_COMPLETE" or .StackStatus=="CREATE_COMPLETE")][0].Parameters')
+
+                  if [ "$PARAMETERS" == "null" ];
+                  then
+                    echo "stack not found"
+                    exit 1
+                  fi
+
                   SNAPSHOT_ID=$(aws ec2 create-snapshot \
                     --volume-id "$ROOT_DISK_ID" \
                     --description "ethereum blockchain synced up to block $TARGET_BLOCK" \
@@ -401,9 +420,6 @@ Resources:
 
                   echo "waiting for snapshot to finish: $SNAPSHOT_ID"
                   aws ec2 wait snapshot-completed --filters "Name=snapshot-id, Values=$SNAPSHOT_ID"
-
-                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name "$2" |
-                    jq '[.Stacks[] | select(.StackStatus=="UPDATE_COMPLETE" or .StackStatus=="CREATE_COMPLETE")][0].Parameters')
 
                   CURRENT_SNAPSHOT=$(echo "$PARAMETERS" | jq '.[] | select(.ParameterKey == "ChainSnapshotId")')
                   if [ $(echo $CURRENT_SNAPSHOT | wc -c) == "0" ]
@@ -419,10 +435,10 @@ Resources:
                 # accepts args: target block, stack name
                 sync_and_update_stack() {
                   sync_to_block "$1"
-                  PARAMETERS=$(get_update_stack_params "$2")
+                  PARAMETERS=$(get_update_stack_params "$1" "$2")
                   echo "updating stack with parameters: $PARAMETERS"
                   aws cloudformation update-stack \
-                    --stack-name "$3" \
+                    --stack-name "$2" \
                     --parameters "$PARAMETERS" \
                     --use-previous-template \
                     --capabilities CAPABILITY_NAMED_IAM
@@ -489,9 +505,9 @@ Resources:
               awslogs-group: !Ref ECSLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: parity
-          Environment:
-            - Name: "TARGET_BLOCK"
-              Value: "1"
+          # Environment:
+          #   - Name: "TARGET_BLOCK"
+          #     Value: "1"
 
       Volumes:
         - Host:
@@ -511,6 +527,60 @@ Resources:
     Type: "AWS::Route53::HostedZone"
     Properties:
       Name: !Ref DNSName
+
+  UpdateDNSLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: mvayngrib-serverless-deployment
+        S3Key: !Join ["/", ["${AWS::StackName}", "lambda.zip"]]
+        FunctionName: ,
+        Handler: "functions/update-dns.handler",
+        MemorySize: 128
+        Role:
+          Fn:GetAtt: [UpdateDNSLambdaExecutionRole, Arn]
+        Runtime: nodejs8.10
+        Timeout: 60
+
+  UpdateDNSLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: '/'
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+            - ec2:*
+            - ecs:*
+            - route53:*
+            Resource: '*'
+
+  DNSUpdater:
+    Type: Custom::DNSUpdater
+    Properties:
+      ServiceToken: !GetAtt UpdateDNSLambda.Arn
+      cluster: !Ref ECSCluster
+      hostedZone: !Ref hosted-zone-id
+      dnsName: !Ref DNSName
+      snapshotId: !Ref ChainSnapshotId
 
 Outputs:
   ECSSecurityGroup:

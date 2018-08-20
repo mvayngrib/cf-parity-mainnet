@@ -1,5 +1,11 @@
 PARAMS=${1-stack-parameters-create.json}
-STACK_NAME=${2-MainnetParity1}
+STACK_NAME=${2-MainnetParity2}
+BUCKET=${2-mvayngrib-serverless-deployment}
+
+# we don't need node_modules/
+zip -r lambda.zip functions/
+aws s3 cp lambda.zip "s3://$BUCKET/$STACK_NAME/"
+
 aws cloudformation create-stack \
   --stack-name $STACK_NAME \
   --template-body file://`pwd`/service-template.yml \
