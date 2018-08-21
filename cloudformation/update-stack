@@ -1,6 +1,10 @@
+#!/bin/bash
+
+source ./.env
+
 PARAMS=${1-stack-parameters-update.json}
-STACK_NAME=${2-MainnetParity1}
 aws cloudformation update-stack \
+  --profile $AWS_PROFILE \
   --stack-name $STACK_NAME \
   --template-body file://`pwd`/service-template.yml \
   --parameters file://`pwd`/$PARAMS \

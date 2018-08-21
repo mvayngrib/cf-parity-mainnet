@@ -38,5 +38,13 @@
   {
     "ParameterKey": "KeyName",
     "ParameterValue": "micro1"
+  },
+  {
+    "ParameterKey": "VolumeSize",
+    "ParameterValue": "100"
+  },
+  {
+    "ParameterKey": "AlertsEmail",
+    "ParameterValue": "mark@tradle.io"
   }
 ]

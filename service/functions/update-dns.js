@@ -1,7 +1,7 @@
 const AWS = require('aws-sdk')
-const response = require('cfn-response')
-const dns = require('./utils/dns')(new AWS.Route53())
-const ec = require('./utils/ec')({
+const response = require('../cfn-response')
+const dns = require('../dns')(new AWS.Route53())
+const ec = require('../ec')({
   ecs: new AWS.ECS(),
   ec2: new AWS.EC2(),
 })
@@ -35,13 +35,13 @@ exports.handler = async (event, context) => {
   try {
     await updateDNS(event)
   } catch (err) {
-    response.send(event, context, response.FAILED, {
+    return await response.send(event, context, response.FAILED, {
       message: err.message,
       stack: err.stack,
     })
-
-    return
   }
 
-  response.send(event, context, response.SUCCESS, {})
+  return await response.send(event, context, response.SUCCESS, {
+    hooray: true
+  })
 }

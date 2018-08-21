@@ -1,14 +1,30 @@
-PARAMS=${1-stack-parameters-create.json}
-STACK_NAME=${2-MainnetParity2}
-BUCKET=${2-mvayngrib-serverless-deployment}
+#!/bin/bash
 
-# we don't need node_modules/
-zip -r lambda.zip functions/
-aws s3 cp lambda.zip "s3://$BUCKET/$STACK_NAME/"
+set -x
+set -euo pipefail
+
+source ./.env
+
+PARAMS_FILE=${1-stack-parameters-create.json}
+
+CUR_DIR=$(pwd)
+cd ../service && zip -r "$CUR_DIR/lambda.zip" . && cd "$CUR_DIR"
+aws --profile $AWS_PROFILE s3 cp lambda.zip "s3://$BUCKET/$STACK_NAME/"
+
+PARAMETERS=$(cat $PARAMS_FILE | jq -c .)
+SYNC_TO_BLOCK=$(echo "$PARAMETERS" | jq -r '.[] | select(.ParameterKey == "SyncToBlock")')
+
+if [ $(echo $SYNC_TO_BLOCK | wc -c) -le 1 ]
+then
+  TARGET_BLOCK_HEX=$(curl -s "https://api.etherscan.io/api?module=proxy&action=eth_blockNumber" | jq -r .result | cut -c3-)
+  TARGET_BLOCK=$(( 16#$TARGET_BLOCK_HEX ))
+  PARAMETERS=$(echo $PARAMETERS | jq -c ".[.|length] |= . + {\"ParameterKey\":\"SyncToBlock\",\"ParameterValue\":\"$TARGET_BLOCK\"}")
+fi
 
 aws cloudformation create-stack \
+  --profile $AWS_PROFILE \
   --stack-name $STACK_NAME \
   --template-body file://`pwd`/service-template.yml \
-  --parameters file://`pwd`/$PARAMS \
+  --parameters "$PARAMETERS" \
   --capabilities CAPABILITY_NAMED_IAM \
   --disable-rollback
