@@ -101,7 +101,7 @@ Parameters:
     Type: String
     Description: SSH Key name to access the machine
     Default: ""
-  RepositoryName:
+  ParityClientRepositoryName:
     Type: String
     Description: Name of ECR repository to use
     Default: parity
@@ -164,18 +164,48 @@ Parameters:
       - default
       - dedicated
 
+  # BEGIN ethereum indexer params
+  RunIndexer:
+    Type: String
+    Description: Run addr->txs indexer
+    Default: 'y'
+    AllowedValues:
+      - 'y'
+      - 'n'
+
+  EthIndexerClientRepositoryName:
+    Type: String
+    Description: Name of ECR repository to use
+    Default: eth-indexer
+    AllowedValues:
+      - eth-indexer
+
+  IndexerStartBlock:
+    Type: Number
+    Description: which block number to start indexing addrs -> txs from
+    MinValue: 0
+    Default: 0
+
+  IndexerConfirmationHeight:
+    Type: Number
+    Description: height at which indexer considers a block confirmed
+    MinValue: 1
+    Default: 15
+
+  # END ethereum indexer params
+
   # RunEthExplorer:
   #   Type: String
   #   AllowedValues:
-  #     - "true"
-  #     - "false"
-  #   Default: "true"
+  #     - "y"
+  #     - "n"
+  #   Default: "y"
   # RunEthStats:
   #   Type: String
   #   AllowedValues:
-  #     - "true"
-  #     - "false"
-  #   Default: "true"
+  #     - "y"
+  #     - "n"
+  #   Default: "y"
 
 Mappings:
   # DefaultSyncToBlock:
@@ -201,27 +231,62 @@ Mappings:
   #     id: 42
 
   AWSRegionToAMI:
-    us-east-2:
-      AMI: ami-1b90a67e
-    us-east-1:
-      AMI: ami-cb17d8b6
-    us-west-2:
-      AMI: ami-05b5277d
-    us-west-1:
-      AMI: ami-9cbbaffc
-    eu-west-3:
-      AMI: ami-914afcec
-    eu-west-2:
-      AMI: ami-a48d6bc3
-    eu-west-1:
-      AMI: ami-bfb5fec6
+    AMI:
+      AMI: amzn-ami-2017.09.k-amazon-ecs-optimized
+    ap-northeast-1:
+      AMI: ami-5add893c
+    ap-northeast-2:
+      AMI: ami-ba74d8d4
+    ap-south-1:
+      AMI: ami-2149114e
+    ap-southeast-1:
+      AMI: ami-acbcefd0
+    ap-southeast-2:
+      AMI: ami-4cc5072e
+    ca-central-1:
+      AMI: ami-a535b2c1
     eu-central-1:
       AMI: ami-ac055447
+    eu-west-1:
+      AMI: ami-bfb5fec6
+    eu-west-2:
+      AMI: ami-a48d6bc3
+    eu-west-3:
+      AMI: ami-914afcec
+    sa-east-1:
+      AMI: ami-d3bce9bf
+    us-east-1:
+      AMI: ami-cb17d8b6
+    us-east-2:
+      AMI: ami-1b90a67e
+    us-west-1:
+      AMI: ami-9cbbaffc
+    us-west-2:
+      AMI: ami-05b5277d
+
+  # AWSRegionToAMI:
+  #   us-east-2:
+  #     AMI: ami-1b90a67e
+  #   us-east-1:
+  #     AMI: ami-cb17d8b6
+  #   us-west-2:
+  #     AMI: ami-05b5277d
+  #   us-west-1:
+  #     AMI: ami-9cbbaffc
+  #   eu-west-3:
+  #     AMI: ami-914afcec
+  #   eu-west-2:
+  #     AMI: ami-a48d6bc3
+  #   eu-west-1:
+  #     AMI: ami-bfb5fec6
+  #   eu-central-1:
+  #     AMI: ami-ac055447
 
 Conditions:
   SSHAccess: !Not [!Equals [ !Ref KeyName, ""]]
   Syncing: !Equals [ !Ref ChainSnapshotId, ""]
   CreateVpc: !Equals [ !Ref VpcId, ""]
+  DoRunIndexer: !Equals [ !Ref RunIndexer, "y"]
 
 Resources:
   Vpc:
@@ -274,6 +339,18 @@ Resources:
           ToPort: 8546
           SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
           IpProtocol: tcp
+
+        # begin indexer port mappings
+        # - FromPort: 443
+        #   ToPort: 80
+        #   SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
+        #   IpProtocol: tcp
+        - FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
+          IpProtocol: tcp
+        # end indexer ports
+
         - !If
           - SSHAccess
           -
@@ -651,7 +728,7 @@ Resources:
       TaskRoleArn: !Ref TaskRole
       NetworkMode: bridge
       ContainerDefinitions:
-        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${RepositoryName}:latest
+        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ParityClientRepositoryName}:latest
           Essential: true
           Memory: 3000
           MemoryReservation: 1800
@@ -666,6 +743,9 @@ Resources:
             - ContainerPort: 30303
               HostPort: 30303
               Protocol: tcp
+            - ContainerPort: 30303
+              HostPort: 30303
+              Protocol: udp
           MountPoints:
             - ContainerPath: /root/.local/share/io.parity.ethereum/chains
               SourceVolume: parity-chains
@@ -679,10 +759,44 @@ Resources:
           #   - Name: "TARGET_BLOCK"
           #     Value: "1"
 
+        - !If
+          - DoRunIndexer
+          - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EthIndexerClientRepositoryName}:latest
+            Essential: true
+            Memory: 3000
+            MemoryReservation: 1800
+            Name: eth-indexer
+            PortMappings:
+              - ContainerPort: 9898
+                HostPort: 80
+                Protocol: tcp
+            MountPoints:
+              - ContainerPath: /root/.eth-indexer/
+                SourceVolume: eth-indexes
+            LogConfiguration:
+              LogDriver: awslogs
+              Options:
+                awslogs-group: !Ref ECSLogGroup
+                awslogs-region: !Ref AWS::Region
+                awslogs-stream-prefix: eth-indexer
+            Environment:
+              - Name: 'NODE_NETWORK'
+                Value: !Ref NetworkName
+              - Name: 'NODE_HOST'
+                Value: 'localhost'
+              - Name: 'START_BLOCK'
+                Value: !Ref IndexerStartBlock
+              - Name: 'CONFIRMATION_HEIGHT'
+                Value: !Ref IndexerConfirmationHeight
+          - !Ref "AWS::NoValue"
+
       Volumes:
         - Host:
             SourcePath: /data/chains
           Name: parity-chains
+        - Host:
+            SourcePath: /data/indexes
+          Name: eth-indexes
 
   ECSService:
     Type: AWS::ECS::Service
@@ -765,6 +879,7 @@ Resources:
 
   SyncTopic:
     Type: AWS::SNS::Topic
+    # Condition: Syncing
     Properties:
       TopicName: !Sub ${AWS::StackName}-${AWS::Region}-${NetworkName}-sync-alarm
       Subscription:
