@@ -3,13 +3,15 @@
 set -x
 set -euo pipefail
 
-source ./.env
+source scripts/.env
 
-PARAMS_FILE=${1-stack-parameters-create.json}
+PARAMS_FILE=${1-"cloudformation/stack-parameters-create.json"}
 
 CUR_DIR=$(pwd)
-cd ../service && zip -r "$CUR_DIR/lambda.zip" . && cd "$CUR_DIR"
+cd ./service && zip -r "$CUR_DIR/lambda.zip" . && cd "$CUR_DIR"
 aws --profile $AWS_PROFILE s3 cp lambda.zip "s3://$BUCKET/$STACK_NAME/"
+
+# PARAMETERS=$(node build-params.js)
 
 PARAMETERS=$(cat $PARAMS_FILE | jq -c .)
 SYNC_TO_BLOCK=$(echo "$PARAMETERS" | jq -r '.[] | select(.ParameterKey == "SyncToBlock")')
@@ -21,10 +23,13 @@ then
   PARAMETERS=$(echo $PARAMETERS | jq -c ".[.|length] |= . + {\"ParameterKey\":\"SyncToBlock\",\"ParameterValue\":\"$TARGET_BLOCK\"}")
 fi
 
+# PARAMETERS=$(echo $PARAMETERS | jq -c "[.[] | select(.ParameterKey == \"DNSName\").ParameterValue = \"$SNAPSHOT_ID\"]")
+
 aws cloudformation create-stack \
-  --profile $AWS_PROFILE \
-  --stack-name $STACK_NAME \
-  --template-body file://`pwd`/service-template.yml \
+  --profile "$AWS_PROFILE" \
+  --stack-name "$STACK_NAME" \
+  --template-body "file://$CUR_DIR/cloudformation/service-template.yml" \
   --parameters "$PARAMETERS" \
   --capabilities CAPABILITY_NAMED_IAM \
-  --disable-rollback
+  --disable-rollback \
+  --timeout 120000

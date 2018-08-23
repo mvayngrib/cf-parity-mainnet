@@ -8,6 +8,8 @@
 // }
 
 const flatten = arr => [].concat.apply([], arr)
+// eslint-disable-next-line no-console
+const log = (...args) => console.log(...args)
 
 class EC {
   constructor({ ecs, ec2 }) {
@@ -18,6 +20,8 @@ class EC {
   async listContainerInstances ({ cluster }) {
     const { ecs } = this
     const { containerInstanceArns } = await ecs.listContainerInstances({ cluster }).promise()
+    log(`found ${containerInstanceArns.length} container instances in cluster: ${cluster}`, containerInstanceArns)
+
     const { containerInstances } = await ecs.describeContainerInstances({
       cluster,
       containerInstances: containerInstanceArns,
@@ -36,6 +40,8 @@ class EC {
   async getEC2PrivateIps ({ cluster }) {
     const containers = await this.listContainerInstances({ cluster })
     const instanceIds = containers.map(c => c.ec2InstanceId)
+    log(`found ${instanceIds.length} ec2 instances in cluster: ${cluster}`, instanceIds)
+
     const instances = await this.getEC2Instances({ instanceIds })
     const ips = instances.map(i => i.PrivateIpAddress)
     return ips

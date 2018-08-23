@@ -7,6 +7,7 @@ const ec = require('../ec')({
 })
 
 const prettify = obj => JSON.stringify(obj, null, 2)
+// eslint-disable-next-line no-console
 const log = (...args) => console.log(...args)
 const REQUEST_TYPES = ['Create', 'Update', 'Delete']
 

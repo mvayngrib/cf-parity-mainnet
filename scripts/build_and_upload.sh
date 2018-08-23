@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+source scripts/.env
+
 require() {
     command -v "$1" > /dev/null 2>&1 || {
         echo "Some of the required software is not installed:"
@@ -10,14 +12,14 @@ require() {
 
 get_url() {
     REPO_NAME=$1
-    OUT=$(aws ecr describe-repositories --repository-name=$REPO_NAME 2> /dev/null || echo "{}")
+    OUT=$(aws --profile "$AWS_PROFILE" ecr describe-repositories --repository-name=$REPO_NAME 2> /dev/null || echo "{}")
     echo $OUT | jq -r ".repositories[0].repositoryUri"
 }
 
 create_repo() {
     REPO_NAME=$1
     echo "Creating ECR repository $REPO_NAME"
-    aws ecr create-repository --repository-name $REPO_NAME
+    aws --profile "$AWS_PROFILE" ecr create-repository --repository-name $REPO_NAME
 }
 
 build () {
@@ -34,7 +36,7 @@ set -e
 require jq
 require aws
 
-REPO_NAME=${1-mainnet-parity}
+REPO_NAME=${1-parity}
 REPO_URL=$(get_url $REPO_NAME)
 if [ $REPO_URL == "null" ]; then
     create_repo $REPO_NAME
@@ -45,7 +47,7 @@ if [ $REPO_URL == "null" ]; then
 fi
 
 BUILD_PATH=./docker
-`aws ecr get-login --no-include-email`
-TAG="$REPO_URL:autoupdater"
+`aws --profile $AWS_PROFILE ecr get-login --no-include-email`
+TAG="$REPO_URL:latest"
 build $TAG $BUILD_PATH
 upload $TAG

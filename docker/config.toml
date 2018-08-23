@@ -1,12 +1,10 @@
 [parity]
-chain = "mainnet"
 auto_update = "none"
 
 [footprint]
 pruning = "fast"
 db_compaction = "ssd"
 cache_size = 512
-
 
 [network]
 port = 30303

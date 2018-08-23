@@ -26,9 +26,9 @@ class DNS {
     this.client = client
   }
 
-  // async listResourceRecordSets ({ hostedZone }) {
-  //   return this.client.listResourceRecordSets({ HostedZoneId: hostedZone }).promise()
-  // }
+  async listResourceRecordSets ({ hostedZone }) {
+    return await this.client.listResourceRecordSets({ HostedZoneId: hostedZone }).promise()
+  }
 
   async upsertARecord (opts) {
     await this._changeARecord({ ...opts, op: 'UPSERT' })

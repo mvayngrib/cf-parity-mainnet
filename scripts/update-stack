@@ -1,8 +1,8 @@
 #!/bin/bash
 
-source ./.env
+source scripts/.env
 
-PARAMS=${1-stack-parameters-update.json}
+PARAMS=${1-../cloudformation/stack-parameters-update.json}
 aws cloudformation update-stack \
   --profile $AWS_PROFILE \
   --stack-name $STACK_NAME \

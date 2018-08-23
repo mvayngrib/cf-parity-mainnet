@@ -1,4 +1,4 @@
-FROM parity/parity:v1.10.3
+FROM parity/parity:v1.11.8
 
 RUN apt-get update && apt-get install -y curl jq && apt-get clean
 

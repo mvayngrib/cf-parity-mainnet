@@ -3,14 +3,93 @@ Description: ECS cluster running single Parity node (on mainnet)
 Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
+    Description: specify if you want to launch into an existing VPC
   SyncInstanceType:
-    Description: Instance type that will be used in created cluster to sync the chain for the firs ttime
     Type: String
+    Description: Instance to sync the chain with for the first time
     Default: c5.large
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - t2.2xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - r4.large
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.18xlarge
+    ConstraintDescription: Please choose a valid instance type.
   PostSyncInstanceType:
-    Description: Instance type that will be used in created cluster when starting from a synced chain
     Type: String
+    Description: Instance to use after first sync
     Default: t2.medium
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - t2.2xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - r4.large
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.18xlarge
+    ConstraintDescription: Please choose a valid instance type.
   ChainSnapshotId:
     Type: String
     Description: EBS Snapshot from which to initiate the chain data
@@ -25,7 +104,9 @@ Parameters:
   RepositoryName:
     Type: String
     Description: Name of ECR repository to use
-    Default: mainnet-parity
+    Default: parity
+    AllowedValues:
+      - parity
   DesiredTaskCount:
     Type: Number
     Default: 1
@@ -56,14 +137,69 @@ Parameters:
     Default: 100
   SyncToBlock:
     Type: Number
-    Default: 6100000
+    Description: which block number to sync to on the first sync
+    MinValue: 1
   AlertsEmail:
-    Description: REQUIRED whatever dev or ops email list is appropriate for your project
+    Description: get alerted when the first sync is complete and snaphotted
     Type: String
     AllowedPattern: "^[\\x20-\\x45]?[\\w-\\+]+(\\.[\\w]+)*@[\\w-]+(\\.[\\w]+)*(\\.[a-z]{2,})$"
     ConstraintDescription: 'must be a valid email address'
 
+  NetworkName:
+    Type: String
+    Description: The Ethereum network
+    Default: mainnet
+    AllowedValues:
+      - mainnet
+      # - morden
+      - ropsten
+      - rinkeby
+      - kovan
+    ConstraintDescription: The ID of the network must be between 1 and 100000.
+
+  InstanceTenancy:
+    Type: String
+    Default: default
+    AllowedValues:
+      - default
+      - dedicated
+
+  # RunEthExplorer:
+  #   Type: String
+  #   AllowedValues:
+  #     - "true"
+  #     - "false"
+  #   Default: "true"
+  # RunEthStats:
+  #   Type: String
+  #   AllowedValues:
+  #     - "true"
+  #     - "false"
+  #   Default: "true"
+
 Mappings:
+  # DefaultSyncToBlock:
+  #   mainnet:
+  #     block: 6200000
+  #   ropsten:
+  #     block: 3896360
+  #   rinkeby:
+  #     block: 2864810
+  #   kovan:
+  #     block: 8469871
+
+  # NetworkNameToConstants:
+  #   mainnet:
+  #     id: 1
+  #   mordern:
+  #     id: 2
+  #   ropsten:
+  #     id: 3
+  #   rinkeby:
+  #     id: 4
+  #   kovan:
+  #     id: 42
+
   AWSRegionToAMI:
     us-east-2:
       AMI: ami-1b90a67e
@@ -85,25 +221,46 @@ Mappings:
 Conditions:
   SSHAccess: !Not [!Equals [ !Ref KeyName, ""]]
   Syncing: !Equals [ !Ref ChainSnapshotId, ""]
+  CreateVpc: !Equals [ !Ref VpcId, ""]
 
 Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Condition: CreateVpc
+    Properties:
+      CidrBlock: 10.0.0.0/24
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: !Ref InstanceTenancy
+      Tags:
+        - Key: blockchain
+          Value: ethereum
+        - Key: client
+          Value: parity
+        - Key: network
+          Value: !Ref NetworkName
+
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: !Ref "AWS::StackName"
+      ClusterName: !Sub ${AWS::StackName}-${NetworkName}-parity
+
   ECSLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub ${AWS::StackName}-logs
+      LogGroupName: !Sub ${AWS::StackName}-${NetworkName}-logs
   AccessSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: !Sub ${AWS::StackName}-access-parity-sg
-      VpcId: !Ref VpcId
+      GroupDescription: !Sub ${AWS::StackName}-${NetworkName}-access-parity-sg
+      VpcId: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref VpcId
   ECSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: !Sub ${AWS::StackName}-sg
+      GroupDescription: !Sub ${AWS::StackName}-${NetworkName}-sg
       SecurityGroupIngress:
         - FromPort: 30303
           ToPort: 30303
@@ -126,15 +283,18 @@ Resources:
             IpProtocol: tcp
           - !Ref "AWS::NoValue"
 
-      VpcId: !Ref VpcId
+      VpcId: !If
+        - CreateVpc
+        - !Ref Vpc
+        - !Ref VpcId
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-sg
+          Value: !Sub ${AWS::StackName}-${NetworkName}-sg
   ECSRole:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      RoleName: !Sub ${AWS::StackName}-ecs-role
+      RoleName: !Sub ${AWS::StackName}-${NetworkName}-ecs-role
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
@@ -177,28 +337,6 @@ Resources:
             Action: sns:Publish
             Resource: !Ref SyncTopic
 
-          # needed for self-update
-          # - Effect: Allow
-          #   Action:
-          #     - cloudformation:UpdateStack
-          #   Resource: !Ref AWS::StackId
-          # - Effect: Allow
-          #   Action:
-          #     - ec2:DescribeVpcs
-          #   Resource: '*'
-          # - Effect: Allow
-          #   Action:
-          #     - lambda:GetFunctionConfiguration
-          #     - lambda:InvokeFunction
-          #   Resource: !Ref UpdateDNSLambda
-          # - Effect: Allow
-          #   Action:
-          #     - iam:PassRole
-          #   Resource: !Sub arn:aws:iam:${AWS::Region}:${AWS::AccountId}:role/${AWS::StackName}-ecs-role
-          # - Effect: Allow
-          #   Action:
-          #     - autoscaling:CreateLaunchConfiguration
-          #   Resource: !Sub arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:launchConfiguration:*:launchConfigurationName/${AWS::StackName}-ECSLaunchConfiguration
   ECSInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
@@ -218,7 +356,7 @@ Resources:
       DesiredCapacity: 1
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-ecs-instance
+          Value: !Sub ${AWS::StackName}-${NetworkName}-ecs-instance
           PropagateAtLaunch: true
     CreationPolicy:
       ResourceSignal:
@@ -276,7 +414,6 @@ Resources:
           /opt/aws/bin/cfn-signal -e $? --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSAutoScalingGroup
 
     Metadata:
-      ChainSnapshotId: !Ref ChainSnapshotId
       AWS::CloudFormation::Init:
         config:
           packages:
@@ -436,40 +573,11 @@ Resources:
                   echo "stack ready!"
                 }
 
-                # accepts args: target block, stack name
-                # sync_and_update_stack() {
-                #   sync_to_block "$TARGET_BLOCK"
-                #   ensure_stack_ready "$STACK_NAME"
-                #   PARAMETERS=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" | \
-                #     jq -c '[.Stacks[] | select(.StackStatus=="UPDATE_COMPLETE" or .StackStatus=="CREATE_COMPLETE")][0].Parameters')
-
-                #   if [ "$PARAMETERS" == "null" ];
-                #   then
-                #     echo "stack not found"
-                #     exit 1
-                #   fi
-
-                #   CURRENT_SNAPSHOT=$(echo "$PARAMETERS" | jq -c '.[] | select(.ParameterKey == "ChainSnapshotId")')
-                #   if [ $(is_empty_or_null "$CURRENT_SNAPSHOT") == "1" ]
-                #   then
-                #     PARAMETERS=$(echo $PARAMETERS | jq -c ".[.|length] |= . + {\"ParameterKey\":\"ChainSnapshotId\",\"ParameterValue\":\"$SNAPSHOT_ID\"}")
-                #   else
-                #     PARAMETERS=$(echo $PARAMETERS | jq -c "[.[] | select(.ParameterKey == \"ChainSnapshotId\").ParameterValue = \"$SNAPSHOT_ID\"]")
-                #   fi
-
-                #   echo "updating stack with parameters: $PARAMETERS"
-                #   aws cloudformation update-stack \
-                #     --stack-name "$STACK_NAME" \
-                #     --parameters "$PARAMETERS" \
-                #     --use-previous-template \
-                #     --capabilities CAPABILITY_NAMED_IAM
-                # }
-
                 create_snapshot_and_alert() {
                   echo "taking snapshot of EBS volume: $ROOT_DISK_ID"
                   SNAPSHOT_ID=$(aws ec2 create-snapshot \
                     --volume-id "$ROOT_DISK_ID" \
-                    --description "ethereum blockchain synced up to block $TARGET_BLOCK" \
+                    --description "parity:${NetworkName}:$TARGET_BLOCK" \
                     | jq -r .SnapshotId)
 
                   echo "waiting for snapshot to finish: $SNAPSHOT_ID"
@@ -491,10 +599,11 @@ Resources:
                     --use-previous-template \
                     --capabilities CAPABILITY_NAMED_IAM"
 
+                  PUBLISH_JSON="{\"TopicArn\":\"${SyncTopic}\",\"Message\":\"I took a snapshot of the synced chain\nSnapshot Id: $SNAPSHOT_ID\n\nEither:\n- follow this update stack link, and set the ChainSnapshotId parameter to $SNAPSHOT_ID: $UPDATE_URL\n- OR, use this AWS CLI update stack command: $UPDATE_COMMAND\"}"
+
                   aws sns publish --topic-arn "${SyncTopic}" \
                     --subject "Ethereum stack synced and ready for update!" \
-                    --message "follow the below link and update your stack with the ChainSnapshotId parameter set to: $SNAPSHOT_ID \n $UPDATE_URL \n\n \
-                    or update with AWS CLI using the following command: $UPDATE_COMMAND"
+                    --cli-input-json "$PUBLISH_JSON"
                 }
 
                 if [ "${ChainSnapshotId}" == "" ];
@@ -526,7 +635,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      RoleName: !Sub ${AWS::StackName}-service-role
+      RoleName: !Sub ${AWS::StackName}-${NetworkName}-service-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -542,7 +651,7 @@ Resources:
       TaskRoleArn: !Ref TaskRole
       NetworkMode: bridge
       ContainerDefinitions:
-        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${RepositoryName}:autoupdater
+        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${RepositoryName}:latest
           Essential: true
           Memory: 3000
           MemoryReservation: 1800
@@ -578,7 +687,7 @@ Resources:
   ECSService:
     Type: AWS::ECS::Service
     Properties:
-      ServiceName: !Sub ${AWS::StackName}-service
+      ServiceName: !Sub ${AWS::StackName}-${NetworkName}-service
       Cluster: !Ref ECSCluster
       DesiredCount: !Ref DesiredTaskCount
       TaskDefinition: !Ref TaskDefinition
@@ -595,7 +704,7 @@ Resources:
       Code:
         S3Bucket: mvayngrib-serverless-deployment
         S3Key: !Sub ${AWS::StackName}/lambda.zip
-      FunctionName: !Sub ${AWS::StackName}-${AWS::Region}-update-dns
+      FunctionName: !Sub ${AWS::StackName}-${AWS::Region}-${NetworkName}-update-dns
       Handler: functions/update-dns.handler
       MemorySize: 128
       Role:
@@ -642,7 +751,7 @@ Resources:
   UpdateDNSLambdaLogGroup:
     Type: "AWS::Logs::LogGroup"
     Properties:
-      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-${AWS::Region}-update-dns
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-${AWS::Region}-${NetworkName}-update-dns
       RetentionInDays: 3
 
   DNSUpdater:
@@ -657,7 +766,7 @@ Resources:
   SyncTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: !Sub ${AWS::StackName}-${AWS::Region}-sync-alarm
+      TopicName: !Sub ${AWS::StackName}-${AWS::Region}-${NetworkName}-sync-alarm
       Subscription:
         - Protocol: email
           Endpoint: !Ref AlertsEmail
@@ -667,19 +776,19 @@ Outputs:
     Description: Id of created ECSSecurityGroup
     Value: !Ref ECSSecurityGroup
     Export:
-      Name: !Sub ${AWS::StackName}-ECSSecurityGroup
+      Name: !Sub ${AWS::StackName}-${NetworkName}-ECSSecurityGroup
   ECSCluster:
     Description: Id of created ECSCluster
     Value: !Ref ECSCluster
     Export:
-      Name: !Sub ${AWS::StackName}-ECSCluster
+      Name: !Sub ${AWS::StackName}-${NetworkName}-ECSCluster
   NameServer:
     Description: NS of created hosted zone
     Value: !Join [ ",", !GetAtt HostedZone.NameServers ]
     Export:
-      Name: !Sub ${AWS::StackName}-NameServer
+      Name: !Sub ${AWS::StackName}-${NetworkName}-NameServer
   AccessSecurityGroup:
     Description: SecurityGroup to access json-rpc
     Value: !Ref AccessSecurityGroup
     Export:
-      Name: !Sub ${AWS::StackName}-AccessSecurityGroup
+      Name: !Sub ${AWS::StackName}-${NetworkName}-AccessSecurityGroup

@@ -21,6 +21,7 @@ exports.send = function(event, context, responseStatus, responseData, physicalRe
               Data: responseData
     });
 
+    // eslint-disable-next-line
     console.log("Response body:\n", responseBody);
 
     var https = require("https");
@@ -39,12 +40,15 @@ exports.send = function(event, context, responseStatus, responseData, physicalRe
     };
 
     var request = https.request(options, function(response) {
+              // eslint-disable-next-line no-console
               console.log("Status code: " + response.statusCode);
+              // eslint-disable-next-line no-console
               console.log("Status message: " + response.statusMessage);
               resolve(context.done());
     });
 
     request.on("error", function(error) {
+              // eslint-disable-next-line no-console
               console.log("send(..) failed executing https.request(..): " + error);
               reject(context.done(error));
     });
