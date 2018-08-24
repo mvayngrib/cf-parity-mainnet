@@ -22,7 +22,7 @@ disable = false
 port = 8546
 interface = "all"
 origins = ["all"]
-apis = ["web3", "eth", "net", "parity", "traces", "rpc", "secretstore"]
+apis = ["web3", "eth", "net", "parity", "traces", "rpc", "secretstore", "pubsub", "parity_pubsub"]
 hosts = ["all"]
 
 [ui]
