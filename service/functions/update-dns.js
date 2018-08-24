@@ -11,7 +11,7 @@ const prettify = obj => JSON.stringify(obj, null, 2)
 const log = (...args) => console.log(...args)
 const REQUEST_TYPES = ['Create', 'Update', 'Delete']
 
-const updateDNS = async ({ RequestType, ResourceProperties }) => {
+const updateDNS = async ({ RequestType, ResourceProperties, OldResourceProperties }) => {
   if (!REQUEST_TYPES.includes(RequestType)) {
     throw new Error(`unexpected RequestType: ${RequestType}`)
   }
@@ -23,7 +23,17 @@ const updateDNS = async ({ RequestType, ResourceProperties }) => {
 
   const ip = ips[0]
 
-  if (RequestType === 'Create' || RequestType === 'Update') {
+  if (RequestType === 'Create') {
+    await dns.upsertARecord({ hostedZone, dnsName, ip })
+  } else if (RequestType === 'Update') {
+    if (OldResourceProperties.hostedZone !== hostedZone || OldResourceProperties.dnsName !== dnsName) {
+      await dns.deleteARecord({
+        hostedZone: OldResourceProperties.hostedZone,
+        dnsName: OldResourceProperties.dnsName,
+        ip
+      })
+    }
+
     await dns.upsertARecord({ hostedZone, dnsName, ip })
   } else if (RequestType === 'Delete') {
     await dns.deleteARecord({ hostedZone, dnsName, ip })

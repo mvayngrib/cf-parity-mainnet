@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: ECS cluster running single Parity node (on mainnet)
+Description: ECS cluster running single Parity node
 Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -7,7 +7,7 @@ Parameters:
   SyncInstanceType:
     Type: String
     Description: Instance to sync the chain with for the first time
-    Default: c5.large
+    Default: c5.large # 3714 actual memory
     AllowedValues:
       - t2.micro
       - t2.small
@@ -150,10 +150,11 @@ Parameters:
     Description: The Ethereum network
     Default: mainnet
     AllowedValues:
+      # parity doesn't support morden, rinkeby,
       - mainnet
       # - morden
       - ropsten
-      - rinkeby
+      # - rinkeby
       - kovan
     ConstraintDescription: The ID of the network must be between 1 and 100000.
 
@@ -731,7 +732,7 @@ Resources:
         - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ParityClientRepositoryName}:latest
           Essential: true
           Memory: 3000
-          MemoryReservation: 1800
+          MemoryReservation: 1000
           Name: parity
           PortMappings:
             - ContainerPort: 8545
@@ -755,16 +756,18 @@ Resources:
               awslogs-group: !Ref ECSLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: parity
-          # Environment:
+          Environment:
+              - Name: 'NETWORK_NAME'
+                Value: !Ref NetworkName
           #   - Name: "TARGET_BLOCK"
           #     Value: "1"
 
         - !If
           - DoRunIndexer
           - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EthIndexerClientRepositoryName}:latest
-            Essential: true
-            Memory: 3000
-            MemoryReservation: 1800
+            Essential: false
+            Memory: 1000
+            MemoryReservation: 512
             Name: eth-indexer
             PortMappings:
               - ContainerPort: 9898
@@ -779,15 +782,19 @@ Resources:
                 awslogs-group: !Ref ECSLogGroup
                 awslogs-region: !Ref AWS::Region
                 awslogs-stream-prefix: eth-indexer
+            Links:
+              - parity
             Environment:
               - Name: 'NODE_NETWORK'
                 Value: !Ref NetworkName
               - Name: 'NODE_HOST'
-                Value: 'localhost'
+                Value: 'parity'
               - Name: 'START_BLOCK'
                 Value: !Ref IndexerStartBlock
               - Name: 'CONFIRMATION_HEIGHT'
                 Value: !Ref IndexerConfirmationHeight
+              - Name: 'DEBUG'
+                Value: 'tradle:*'
           - !Ref "AWS::NoValue"
 
       Volumes:

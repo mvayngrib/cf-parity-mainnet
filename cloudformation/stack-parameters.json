@@ -28,10 +28,6 @@
     "ParameterValue": "300"
   },
   {
-    "ParameterKey": "DNSName",
-    "ParameterValue": "ethmainnet2.mvayngrib.com"
-  },
-  {
     "ParameterKey": "DesiredTaskCount",
     "ParameterValue": "1"
   },
@@ -46,13 +42,5 @@
   {
     "ParameterKey": "AlertsEmail",
     "ParameterValue": "mark@tradle.io"
-  },
-  {
-    "ParameterKey": "ChainSnapshotId",
-    "ParameterValue": "snap-0ae835c3fac82640d"
-  },
-  {
-    "ParameterKey": "NetworkName",
-    "ParameterValue": "rinkeby"
   }
 ]

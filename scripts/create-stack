@@ -1,35 +1,31 @@
 #!/bin/bash
 
 set -x
-set -euo pipefail
+# set -euo pipefail
 
 source scripts/.env
 
-PARAMS_FILE=${1-"cloudformation/stack-parameters-create.json"}
+# relative to build-params.js script
+PARAMS_FILE=${1-"../cloudformation/stack-parameters.json"}
 
 CUR_DIR=$(pwd)
 cd ./service && zip -r "$CUR_DIR/lambda.zip" . && cd "$CUR_DIR"
 aws --profile $AWS_PROFILE s3 cp lambda.zip "s3://$BUCKET/$STACK_NAME/"
 
-# PARAMETERS=$(node build-params.js)
+PARAMETERS=$(node scripts/build-params.js $PARAMS_FILE)
+echo $PARAMETERS
+# aws cloudformation create-stack \
+#   --profile "$AWS_PROFILE" \
+#   --stack-name "$STACK_NAME" \
+#   --template-body "file://$CUR_DIR/cloudformation/service-template.yml" \
+#   --parameters "$PARAMETERS" \
+#   --capabilities CAPABILITY_NAMED_IAM \
+#   --disable-rollback \
+#   --timeout 120000
 
-PARAMETERS=$(cat $PARAMS_FILE | jq -c .)
-SYNC_TO_BLOCK=$(echo "$PARAMETERS" | jq -r '.[] | select(.ParameterKey == "SyncToBlock")')
-
-if [ $(echo $SYNC_TO_BLOCK | wc -c) -le 1 ]
-then
-  TARGET_BLOCK_HEX=$(curl -s "https://api.etherscan.io/api?module=proxy&action=eth_blockNumber" | jq -r .result | cut -c3-)
-  TARGET_BLOCK=$(( 16#$TARGET_BLOCK_HEX ))
-  PARAMETERS=$(echo $PARAMETERS | jq -c ".[.|length] |= . + {\"ParameterKey\":\"SyncToBlock\",\"ParameterValue\":\"$TARGET_BLOCK\"}")
-fi
-
-# PARAMETERS=$(echo $PARAMETERS | jq -c "[.[] | select(.ParameterKey == \"DNSName\").ParameterValue = \"$SNAPSHOT_ID\"]")
-
-aws cloudformation create-stack \
+aws cloudformation update-stack \
   --profile "$AWS_PROFILE" \
   --stack-name "$STACK_NAME" \
   --template-body "file://$CUR_DIR/cloudformation/service-template.yml" \
   --parameters "$PARAMETERS" \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --disable-rollback \
-  --timeout 120000
+  --capabilities CAPABILITY_NAMED_IAM
