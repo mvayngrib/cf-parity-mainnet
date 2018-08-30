@@ -11,21 +11,27 @@ PARAMS_FILE=${1-"../cloudformation/stack-parameters.json"}
 CUR_DIR=$(pwd)
 cd ./service && zip -r "$CUR_DIR/lambda.zip" . && cd "$CUR_DIR"
 aws --profile $AWS_PROFILE s3 cp lambda.zip "s3://$BUCKET/$STACK_NAME/"
+aws --profile $AWS_PROFILE s3 cp \
+  --recursive "$CUR_DIR/cloudformation/" "s3://$BUCKET/$STACK_NAME/" \
+  --exclude "*" \
+  --include "*.yml"
+  # \
+  # --acl public-read
 
-PARAMETERS=$(node scripts/build-params.js $PARAMS_FILE)
-echo $PARAMETERS
-# aws cloudformation create-stack \
-#   --profile "$AWS_PROFILE" \
-#   --stack-name "$STACK_NAME" \
-#   --template-body "file://$CUR_DIR/cloudformation/service-template.yml" \
-#   --parameters "$PARAMETERS" \
-#   --capabilities CAPABILITY_NAMED_IAM \
-#   --disable-rollback \
-#   --timeout 120000
+PARAMETERS=$(node scripts/build-params.js "$PARAMS_FILE" "$BUCKET/$STACK_NAME")
 
-aws cloudformation update-stack \
+aws cloudformation create-stack \
   --profile "$AWS_PROFILE" \
   --stack-name "$STACK_NAME" \
-  --template-body "file://$CUR_DIR/cloudformation/service-template.yml" \
+  --template-body "file://$CUR_DIR/cloudformation/main.yml" \
   --parameters "$PARAMETERS" \
-  --capabilities CAPABILITY_NAMED_IAM
+  --capabilities CAPABILITY_NAMED_IAM \
+  --disable-rollback \
+  --timeout 120000
+
+# aws cloudformation update-stack \
+#   --profile "$AWS_PROFILE" \
+#   --stack-name "$STACK_NAME" \
+#   --template-body "file://$CUR_DIR/cloudformation/ecs.yml" \
+#   --parameters "$PARAMETERS" \
+#   --capabilities CAPABILITY_NAMED_IAM

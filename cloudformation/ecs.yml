@@ -1,9 +1,20 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: ECS cluster running single Parity node
 Parameters:
+  Namespace:
+    Type: String
+
   VpcId:
+    Description: the VPC to launch the cluster in
     Type: AWS::EC2::VPC::Id
-    Description: specify if you want to launch into an existing VPC
+
+  ALBSubnets:
+    Description: subnets to deploy ALB to
+    Type: List<AWS::EC2::Subnet::Id>
+
+  ECSFamily:
+    Type: String
+
   SyncInstanceType:
     Type: String
     Description: Instance to sync the chain with for the first time
@@ -156,7 +167,7 @@ Parameters:
       - ropsten
       # - rinkeby
       - kovan
-    ConstraintDescription: The ID of the network must be between 1 and 100000.
+    ConstraintDescription: invalid network name, specify mainnet, ropsten, or kovan
 
   InstanceTenancy:
     Type: String
@@ -286,72 +297,49 @@ Mappings:
 Conditions:
   SSHAccess: !Not [!Equals [ !Ref KeyName, ""]]
   Syncing: !Equals [ !Ref ChainSnapshotId, ""]
-  CreateVpc: !Equals [ !Ref VpcId, ""]
   DoRunIndexer: !Equals [ !Ref RunIndexer, "y"]
 
 Resources:
-  Vpc:
-    Type: AWS::EC2::VPC
-    Condition: CreateVpc
-    Properties:
-      CidrBlock: 10.0.0.0/24
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      InstanceTenancy: !Ref InstanceTenancy
-      Tags:
-        - Key: blockchain
-          Value: ethereum
-        - Key: client
-          Value: parity
-        - Key: network
-          Value: !Ref NetworkName
 
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: !Sub ${AWS::StackName}-${NetworkName}-parity
+      ClusterName: !Sub ${Namespace}-parity
 
   ECSLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub ${AWS::StackName}-${NetworkName}-logs
+      LogGroupName: !Sub ${Namespace}-logs
+
   AccessSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: !Sub ${AWS::StackName}-${NetworkName}-access-parity-sg
-      VpcId: !If
-        - CreateVpc
-        - !Ref Vpc
-        - !Ref VpcId
+      GroupDescription: !Sub ${Namespace}-access-parity-sg
+      VpcId: !Ref VpcId
+
+  # ALBSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     GroupDescription: !Sub ${Namespace}-access-parity-sg
+  #     VpcId: !Ref VpcId
+  #     SecurityGroupIngress:
+  #       IpProtocol: tcp
+  #       FromPort: 80
+  #       ToPort: 80
+  #       CidrIp: 0.0.0.0/0
+
   ECSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: !Sub ${AWS::StackName}-${NetworkName}-sg
+      GroupDescription: !Sub ${Namespace}-sg
       SecurityGroupIngress:
+        # PUBLIC
         - FromPort: 30303
           ToPort: 30303
           CidrIp: 0.0.0.0/0
           IpProtocol: tcp
-        - FromPort: 8545
-          ToPort: 8545
-          SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
-          IpProtocol: tcp
-        - FromPort: 8546
-          ToPort: 8546
-          SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
-          IpProtocol: tcp
 
-        # begin indexer port mappings
-        # - FromPort: 443
-        #   ToPort: 80
-        #   SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
-        #   IpProtocol: tcp
-        - FromPort: 80
-          ToPort: 80
-          SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
-          IpProtocol: tcp
-        # end indexer ports
-
+        # ssh
         - !If
           - SSHAccess
           -
@@ -361,18 +349,33 @@ Resources:
             IpProtocol: tcp
           - !Ref "AWS::NoValue"
 
-      VpcId: !If
-        - CreateVpc
-        - !Ref Vpc
-        - !Ref VpcId
+        # PRIVATE
+        - FromPort: 8545
+          ToPort: 8545
+          SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
+          IpProtocol: tcp
+        - FromPort: 8546
+          ToPort: 8546
+          SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
+          IpProtocol: tcp
+
+        - FromPort: 80
+          ToPort: 80
+          # all
+          CidrIp: 0.0.0.0/0
+          # SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
+          IpProtocol: tcp
+        # end indexer ports
+
+      VpcId: !Ref VpcId
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-${NetworkName}-sg
+          Value: !Sub ${Namespace}-sg
   ECSRole:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      RoleName: !Sub ${AWS::StackName}-${NetworkName}-ecs-role
+      RoleName: !Sub ${Namespace}-ecs-role
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
@@ -410,6 +413,8 @@ Resources:
               - logs:PutLogEvents
               - route53:*
               - cloudformation:DescribeStacks
+              - elasticloadbalancing:RegisterTargets
+              - elasticloadbalancing:DeregisterTargets
             Resource: "*"
           - Effect: Allow
             Action: sns:Publish
@@ -429,18 +434,20 @@ Resources:
         Fn::GetAZs:
           Ref: "AWS::Region"
       LaunchConfigurationName: !Ref ECSLaunchConfiguration
+      # allow remove before replace
       MinSize: 1
-      MaxSize: 2
+      MaxSize: 1
       DesiredCapacity: 1
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-${NetworkName}-ecs-instance
+          Value: !Sub ${Namespace}-ecs-instance
           PropagateAtLaunch: true
     CreationPolicy:
       ResourceSignal:
         Timeout: PT10M
     UpdatePolicy:
       AutoScalingRollingUpdate:
+        # allow to remove during update
         MinInstancesInService: 1
         MaxBatchSize: 1
         PauseTime: PT10M
@@ -451,6 +458,86 @@ Resources:
           - AlarmNotification
           - ScheduledActions
         WaitOnResourceSignals: true
+
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Ref NetworkName
+      Subnets: !Ref ALBSubnets
+      SecurityGroups:
+        - !Ref ECSSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Ref NetworkName
+
+  IndexerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn: ALB
+    Properties:
+      VpcId: !Ref VpcId
+      Port: 80 # will be overridden when ECS registers a task as a target
+      Protocol: HTTP
+      HealthCheckIntervalSeconds: 60
+      UnhealthyThresholdCount: 10
+      HealthCheckPath: /
+
+  # JsonRpcTargetGroup:
+  #   Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  #   DependsOn: ALB
+  #   Properties:
+  #     VpcId: !Ref VpcId
+  #     Port: 8545 # will be overridden when ECS registers a task as a target
+  #     Protocol: HTTP
+  #     HealthCheckIntervalSeconds: 60
+  #     UnhealthyThresholdCount: 10
+  #     HealthCheckPath: /
+
+  IndexerALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref IndexerTargetGroup
+
+  # JsonRpcALBListener:
+  #   Type: AWS::ElasticLoadBalancingV2::Listener
+  #   Properties:
+  #     LoadBalancerArn: !Ref ALB
+  #     Port: 8545
+  #     Protocol: HTTP
+  #     DefaultActions:
+  #       - Type: forward
+  #         TargetGroupArn: !Ref JsonRpcTargetGroup
+
+  IndexerALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref IndexerALBListener
+      Priority: 1
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - '/'
+            # - '/indexer'
+      Actions:
+        - TargetGroupArn: !Ref IndexerTargetGroup
+          Type: forward
+
+  # JsonRpcALBListenerRule:
+  #   Type: AWS::ElasticLoadBalancingV2::ListenerRule
+  #   Properties:
+  #     ListenerArn: !Ref JsonRpcALBListener
+  #     Priority: 2
+  #     Conditions:
+  #       - Field: path-pattern
+  #         Values:
+  #           - '/rpc'
+  #     Actions:
+  #       - TargetGroupArn: !Ref IndexerTargetGroup # JsonRpcTargetGroup
+  #         Type: forward
 
   ECSLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -601,7 +688,7 @@ Resources:
                   while true
                   do
                     SYNC_STATUS=$(curl -X POST -H 'Content-Type: application/json' \
-                      --data "{\"jsonrpc\":\"2.0\",\"method\": \"eth_getBlockByNumber\", \"params\": [\"0x$TARGET_BLOCK_HEX\", true],\"id\":83}" \
+                      --data "{\"JsonRpc\":\"2.0\",\"method\": \"eth_getBlockByNumber\", \"params\": [\"0x$TARGET_BLOCK_HEX\", true],\"id\":83}" \
                       "$LOCAL_IP:8545" || echo "$BLOCK_ZERO_RESP")
 
                     SYNC_STATUS=$(echo "$SYNC_STATUS" | jq -r .result)
@@ -713,7 +800,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      RoleName: !Sub ${AWS::StackName}-${NetworkName}-service-role
+      RoleName: !Sub ${Namespace}-service-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -725,7 +812,7 @@ Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !Sub parity
+      Family: !Ref ECSFamily
       TaskRoleArn: !Ref TaskRole
       NetworkMode: bridge
       ContainerDefinitions:
@@ -736,16 +823,16 @@ Resources:
           Name: parity
           PortMappings:
             - ContainerPort: 8545
-              HostPort: 8545
+              HostPort: 0
               Protocol: tcp
             - ContainerPort: 8546
-              HostPort: 8546
+              HostPort: 0
               Protocol: tcp
             - ContainerPort: 30303
-              HostPort: 30303
+              HostPort: 0
               Protocol: tcp
             - ContainerPort: 30303
-              HostPort: 30303
+              HostPort: 0
               Protocol: udp
           MountPoints:
             - ContainerPath: /root/.local/share/io.parity.ethereum/chains
@@ -770,8 +857,8 @@ Resources:
             MemoryReservation: 512
             Name: eth-indexer
             PortMappings:
-              - ContainerPort: 9898
-                HostPort: 80
+              - ContainerPort: 80
+                HostPort: 0
                 Protocol: tcp
             MountPoints:
               - ContainerPath: /root/.eth-indexer/
@@ -789,6 +876,11 @@ Resources:
                 Value: !Ref NetworkName
               - Name: 'NODE_HOST'
                 Value: 'parity'
+              - Name: 'NODE_PORT'
+                Value: '80'
+              # gets stuck periodically otherwise
+              - Name: 'NODE_USE_WS'
+                Value: 'false'
               - Name: 'START_BLOCK'
                 Value: !Ref IndexerStartBlock
               - Name: 'CONFIRMATION_HEIGHT'
@@ -807,11 +899,20 @@ Resources:
 
   ECSService:
     Type: AWS::ECS::Service
+    DependsOn: IndexerALBListener
     Properties:
-      ServiceName: !Sub ${AWS::StackName}-${NetworkName}-service
+      ServiceName: !Sub ${Namespace}-service
       Cluster: !Ref ECSCluster
       DesiredCount: !Ref DesiredTaskCount
       TaskDefinition: !Ref TaskDefinition
+      LoadBalancers:
+        - ContainerName: eth-indexer
+          ContainerPort: 80
+          TargetGroupArn: !Ref IndexerTargetGroup
+        # - ContainerName: parity
+        #   ContainerPort: 8545
+        #   TargetGroupArn: !Ref JsonRpcTargetGroup
+
       # TaskDefinition: !Join [ "", ['arn:aws:ecs:', !Ref "AWS::Region", ':', !Ref "AWS::AccountId", ':task-definition/parity:1']]
 
   HostedZone:
@@ -824,8 +925,8 @@ Resources:
     Properties:
       Code:
         S3Bucket: mvayngrib-serverless-deployment
-        S3Key: !Sub ${AWS::StackName}/lambda.zip
-      FunctionName: !Sub ${AWS::StackName}-${AWS::Region}-${NetworkName}-update-dns
+        S3Key: !Sub ${Namespace}/lambda.zip
+      FunctionName: !Sub ${Namespace}-update-dns
       Handler: functions/update-dns.handler
       MemorySize: 128
       Role:
@@ -894,23 +995,43 @@ Resources:
           Endpoint: !Ref AlertsEmail
 
 Outputs:
+
   ECSSecurityGroup:
-    Description: Id of created ECSSecurityGroup
+    Description: security group for parity and indexer containers
     Value: !Ref ECSSecurityGroup
-    Export:
-      Name: !Sub ${AWS::StackName}-${NetworkName}-ECSSecurityGroup
+    # Export:
+    #   Name: !Sub ${Namespace}-ECSSecurityGroup
+
   ECSCluster:
-    Description: Id of created ECSCluster
+    Description: cluster with parity and indexer
     Value: !Ref ECSCluster
-    Export:
-      Name: !Sub ${AWS::StackName}-${NetworkName}-ECSCluster
+    # Export:
+    #   Name: !Sub ${Namespace}-ECSCluster
+
   NameServer:
     Description: NS of created hosted zone
     Value: !Join [ ",", !GetAtt HostedZone.NameServers ]
     Export:
-      Name: !Sub ${AWS::StackName}-${NetworkName}-NameServer
+      Name: !Sub ${Namespace}-NameServer
+
   AccessSecurityGroup:
     Description: SecurityGroup to access json-rpc
     Value: !Ref AccessSecurityGroup
     Export:
-      Name: !Sub ${AWS::StackName}-${NetworkName}-AccessSecurityGroup
+      Name: !Sub ${Namespace}-AccessSecurityGroup
+
+  IndexerDNSName:
+    Description: DNS name for the indexer
+    Value:
+      !Join ['', [!GetAtt [ ALB, DNSName ], '/']]
+
+  # JsonRpcDNSName:
+  #   Description: DNS name for json-rpc
+  #   Value:
+  #     !Join ['', [!GetAtt [ ALB, DNSName ], '/rpc']]
+
+  # ALBSecurityGroup:
+  #   Description: SecurityGroup to access json-rpc
+  #   Value: !Ref ALBSecurityGroup
+  #   Export:
+  #     Name: !Sub ${Namespace}-ALBSecurityGroup

@@ -1,0 +1,305 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: root stack for parity in ECS
+Parameters:
+
+  S3TemplatesPath:
+    Type: String
+
+  # VPC
+
+  VpcCIDR:
+    Description: IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.0.0.0/16
+
+  PublicSubnet1CIDR:
+    Description: IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.0.10.0/24
+
+  PublicSubnet2CIDR:
+    Description: IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.11.0/24
+
+  PrivateSubnet1CIDR:
+    Description: IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 10.0.20.0/24
+
+  PrivateSubnet2CIDR:
+    Description: IP range (CIDR notation) for the private subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.21.0/24
+
+  # ECS
+
+  SyncInstanceType:
+    Type: String
+    Description: Instance to sync the chain with for the first time
+    Default: c5.large # 3714 actual memory
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - t2.2xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - r4.large
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.18xlarge
+    ConstraintDescription: Please choose a valid instance type.
+  PostSyncInstanceType:
+    Type: String
+    Description: Instance to use after first sync
+    Default: t2.medium
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - t2.2xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - r4.large
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.18xlarge
+    ConstraintDescription: Please choose a valid instance type.
+  ChainSnapshotId:
+    Type: String
+    Description: EBS Snapshot from which to initiate the chain data
+    Default: ""
+  DNSName:
+    Type: String
+    Description: DNS name to register too
+  KeyName:
+    Type: String
+    Description: SSH Key name to access the machine
+    Default: ""
+  ParityClientRepositoryName:
+    Type: String
+    Description: Name of ECR repository to use
+    Default: parity
+    AllowedValues:
+      - parity
+  DesiredTaskCount:
+    Type: Number
+    Default: 1
+  SyncVolumeType:
+    Type: String
+    Default: io1
+    AllowedValues:
+      - io1
+      - gp2
+      - st1
+      - sc1
+  PostSyncVolumeType:
+    Type: String
+    Default: gp2
+    AllowedValues:
+      - io1
+      - gp2
+      - st1
+      - sc1
+  SyncIops:
+    Type: Number
+    Default: 2500
+  PostSyncIops:
+    Type: Number
+    Default: 300
+  VolumeSize:
+    Type: Number
+    Default: 100
+  SyncToBlock:
+    Type: Number
+    Description: which block number to sync to on the first sync
+    MinValue: 1
+  AlertsEmail:
+    Description: get alerted when the first sync is complete and snaphotted
+    Type: String
+    AllowedPattern: "^[\\x20-\\x45]?[\\w-\\+]+(\\.[\\w]+)*@[\\w-]+(\\.[\\w]+)*(\\.[a-z]{2,})$"
+    ConstraintDescription: 'must be a valid email address'
+
+  NetworkName:
+    Type: String
+    Description: The Ethereum network
+    Default: mainnet
+    AllowedValues:
+      # parity doesn't support morden, rinkeby,
+      - mainnet
+      # - morden
+      - ropsten
+      # - rinkeby
+      - kovan
+    ConstraintDescription: invalid network name, specify mainnet, ropsten, or kovan
+
+  InstanceTenancy:
+    Type: String
+    Default: default
+    AllowedValues:
+      - default
+      - dedicated
+
+  ReverseProxyRepositoryName:
+    Type: String
+    Description: Name of ECR repository to use
+    Default: parity
+    AllowedValues:
+      - parity
+
+  # BEGIN ethereum indexer params
+  RunIndexer:
+    Type: String
+    Description: Run addr->txs indexer
+    Default: 'y'
+    AllowedValues:
+      - 'y'
+      - 'n'
+
+  EthIndexerClientRepositoryName:
+    Type: String
+    Description: Name of ECR repository to use
+    Default: eth-indexer
+    AllowedValues:
+      - eth-indexer
+
+  IndexerStartBlock:
+    Type: Number
+    Description: which block number to start indexing addrs -> txs from
+    MinValue: 0
+    Default: 0
+
+  IndexerConfirmationHeight:
+    Type: Number
+    Description: height at which indexer considers a block confirmed
+    MinValue: 1
+    Default: 15
+
+Mappings:
+  ecs:
+    family:
+      name: parity
+
+Resources:
+  VPC:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/vpc.yml
+      Parameters:
+        Namespace: !Ref AWS::StackName
+        VpcCIDR: !Ref VpcCIDR
+        PublicSubnet1CIDR: !Ref PublicSubnet1CIDR
+        PublicSubnet2CIDR: !Ref PublicSubnet2CIDR
+        PrivateSubnet1CIDR: !Ref PrivateSubnet1CIDR
+        PrivateSubnet2CIDR: !Ref PrivateSubnet2CIDR
+
+  Ethereum:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: VPC
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/ecs.yml
+      Parameters:
+        Namespace: !Ref AWS::StackName
+        VpcId: !GetAtt VPC.Outputs.VPC
+        ALBSubnets: !GetAtt VPC.Outputs.PublicSubnets
+        ECSFamily: !FindInMap [ecs, family, name]
+
+        SyncInstanceType: !Ref SyncInstanceType
+        PostSyncInstanceType: !Ref PostSyncInstanceType
+        ChainSnapshotId: !Ref ChainSnapshotId
+        DNSName: !Ref DNSName
+        KeyName: !Ref KeyName
+        ParityClientRepositoryName: !Ref ParityClientRepositoryName
+        DesiredTaskCount: !Ref DesiredTaskCount
+        SyncVolumeType: !Ref SyncVolumeType
+        PostSyncVolumeType: !Ref PostSyncVolumeType
+        SyncIops: !Ref SyncIops
+        PostSyncIops: !Ref PostSyncIops
+        VolumeSize: !Ref VolumeSize
+        SyncToBlock: !Ref SyncToBlock
+        AlertsEmail: !Ref AlertsEmail
+        NetworkName: !Ref NetworkName
+        InstanceTenancy: !Ref InstanceTenancy
+        RunIndexer: !Ref RunIndexer
+        EthIndexerClientRepositoryName: !Ref EthIndexerClientRepositoryName
+        IndexerStartBlock: !Ref IndexerStartBlock
+        IndexerConfirmationHeight: !Ref IndexerConfirmationHeight
+
+  ReverseProxy:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/proxy.yml
+      Parameters:
+        Namespace: !Ref AWS::StackName
+        VpcId: !GetAtt VPC.Outputs.VPC
+        ECSFamily: !FindInMap [ecs, family, name]
+        ECSCluster: !GetAtt Ethereum.Outputs.ECSCluster
+        RepositoryName: !Ref ReverseProxyRepositoryName
+
+Outputs:
+  VPC:
+    Description: A reference to the created VPC
+    Value: !GetAtt VPC.Outputs.VPC
+
+  IndexerDNSName:
+    Description: indexer DNS name
+    Value: !GetAtt Ethereum.Outputs.IndexerDNSName
+
+  JsonRpcDNSName:
+    Description: indexer DNS name
+    Value: !GetAtt Ethereum.Outputs.JsonRpcDNSName

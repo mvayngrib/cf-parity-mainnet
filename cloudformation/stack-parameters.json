@@ -1,9 +1,5 @@
 [
   {
-    "ParameterKey": "VpcId",
-    "ParameterValue": "vpc-51359736"
-  },
-  {
     "ParameterKey": "SyncInstanceType",
     "ParameterValue": "c5.large"
   },
@@ -42,5 +38,9 @@
   {
     "ParameterKey": "AlertsEmail",
     "ParameterValue": "mark@tradle.io"
+  },
+  {
+    "ParameterKey": "ChainSnapshotId",
+    "ParameterValue": "snap-094c986f94984df4d"
   }
 ]

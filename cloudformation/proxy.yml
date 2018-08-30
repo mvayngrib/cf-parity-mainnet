@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: root stack for parity in ECS
+Parameters:
+  Namespace:
+    Type: String
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+
+  ECSFamily:
+    Type: String
+
+  ECSCluster:
+    Type: String
+
+  RepositoryName:
+    Type: String
+
+  # S3ConfigPath:
+  #   Type: String
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub ${Namespace}-nginx-logs
+
+  # TaskRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     Path: /
+  #     RoleName: ${self:custom.stackName}-task-role
+  #     AssumeRolePolicyDocument: |
+  #       {
+  #         "Statement": [{
+  #           "Effect": "Allow",
+  #           "Principal": {
+  #             "Service": "ecs-tasks.amazonaws.com"
+  #           },
+  #           "Action": "sts:AssumeRole"
+  #         }]
+  #       }
+  #     Policies:
+  #     - PolicyName: fetch-config
+  #       PolicyDocument: |
+  #         {
+  #           "Statement": [{
+  #             "Effect": "Allow",
+  #             "Action": "s3:getObject",
+  #             "Resource": "arn:aws:s3:::${self:provider.environment.NGINX_CONFIG_BUCKET_NAME}/*"
+  #           }]
+  #         }
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref ECSFamily
+      # TaskRoleArn: !Ref TaskRole
+      NetworkMode: bridge
+      ContainerDefinitions:
+        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${RepositoryName}:latest
+          Essential: true
+          Memory: 64
+          MemoryReservation: 32
+          Name: nginx-proxy
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 0
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: nginx-proxy
+
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref Listener
+      Priority: 1
+      # Conditions:
+      #   - Field: host-header
+      #     Values:
+      #       - ${self:custom.config.Host}
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub ${Namespace}-nginx-tg
+      HealthCheckPath: "/"
+      HealthCheckProtocol: HTTP
+      HealthyThresholdCount: 2
+      Matcher:
+        HttpCode: 404
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: !Ref VpcId
+      TargetGroupAttributes:
+        - Key: "deregistration_delay.timeout_seconds"
+          Value: "10"
+
+  ServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub ${Namespace}-nginx-service-role
+      AssumeRolePolicyDocument: |
+        {
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "ecs.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }]
+        }
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument: |
+          {
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": [
+                "elasticloadbalancing:Describe*",
+                "elasticloadbalancing:DeregisterInstancesFromLoadBalancer",
+                "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
+                "ec2:Describe*",
+                "ec2:AuthorizeSecurityGroupIngress",
+                "elasticloadbalancing:RegisterTargets",
+                "elasticloadbalancing:DeregisterTargets"
+              ],
+              "Resource": "*"
+            }]
+          }
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub ${Namespace}-reverse-proxy
+      Cluster: !Ref ECSCluster
+      DesiredCount: 1
+      TaskDefinition: !Ref TaskDefinition
+      Role: !Ref ServiceRole
+      LoadBalancers:
+        - TargetGroupArn: !Ref TargetGroup
+          ContainerName: nginx-proxy
+          ContainerPort: 80

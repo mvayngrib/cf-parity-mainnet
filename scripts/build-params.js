@@ -1,7 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const fetch = require('node-fetch')
-let paramsFile = process.argv[2]
+let [paramsFile, templateDir] = process.argv.slice(2)
 if (!paramsFile) {
   throw new Error(`expected base params file as first arg`)
 }
@@ -29,10 +29,12 @@ const getCurrentBlock = async () => {
   return parseInt(result.slice(2), 16)
 }
 
+
 const build = async paramsFile => {
   const params = require(paramsFile).slice()
+  const getParam = key => params.find(p => p.ParameterKey === key)
   const { NETWORK } = loadEnv()
-  const syncToBlockParam = params.find(p => p.ParameterKey === 'SyncToBlock')
+  const syncToBlockParam = getParam('SyncToBlock')
   if (!syncToBlockParam) {
     params.push({
       ParameterKey: 'SyncToBlock',
@@ -40,7 +42,7 @@ const build = async paramsFile => {
     })
   }
 
-  const netParam = params.find(p => p.ParameterKey === 'NetworkName')
+  const netParam = getParam('NetworkName')
   if (!netParam) {
     params.push({
       ParameterKey: 'NetworkName',
@@ -48,11 +50,22 @@ const build = async paramsFile => {
     })
   }
 
-  const dnsParam = params.find(p => p.ParameterKey === 'DNSName')
+  const dnsParam = getParam('DNSName')
   if (!dnsParam) {
     params.push({
       ParameterKey: 'DNSName',
       ParameterValue: `eth-${NETWORK}.mvayngrib.com`
+    })
+  }
+
+  const tDir = getParam('S3TemplatesPath')
+  if (!tDir) {
+    params.push({
+      ParameterKey: 'S3TemplatesPath',
+      // trim begin/end slashes
+      ParameterValue: templateDir
+        .replace(/^[/]+/, '')
+        .replace(/[/]+$/, '')
     })
   }
 
