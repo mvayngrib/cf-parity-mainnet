@@ -250,54 +250,38 @@ Mappings:
   AWSRegionToAMI:
     AMI:
       AMI: amzn-ami-2017.09.k-amazon-ecs-optimized
-    ap-northeast-1:
-      AMI: ami-5add893c
-    ap-northeast-2:
-      AMI: ami-ba74d8d4
-    ap-south-1:
-      AMI: ami-2149114e
-    ap-southeast-1:
-      AMI: ami-acbcefd0
-    ap-southeast-2:
-      AMI: ami-4cc5072e
-    ca-central-1:
-      AMI: ami-a535b2c1
-    eu-central-1:
-      AMI: ami-ac055447
-    eu-west-1:
-      AMI: ami-bfb5fec6
-    eu-west-2:
-      AMI: ami-a48d6bc3
-    eu-west-3:
-      AMI: ami-914afcec
-    sa-east-1:
-      AMI: ami-d3bce9bf
-    us-east-1:
-      AMI: ami-cb17d8b6
     us-east-2:
-      AMI: ami-1b90a67e
-    us-west-1:
-      AMI: ami-9cbbaffc
+      AMI: ami-028a9de0a7e353ed9
+    us-east-1:
+      AMI: ami-00129b193dc81bc31
     us-west-2:
-      AMI: ami-05b5277d
-
-  # AWSRegionToAMI:
-  #   us-east-2:
-  #     AMI: ami-1b90a67e
-  #   us-east-1:
-  #     AMI: ami-cb17d8b6
-  #   us-west-2:
-  #     AMI: ami-05b5277d
-  #   us-west-1:
-  #     AMI: ami-9cbbaffc
-  #   eu-west-3:
-  #     AMI: ami-914afcec
-  #   eu-west-2:
-  #     AMI: ami-a48d6bc3
-  #   eu-west-1:
-  #     AMI: ami-bfb5fec6
-  #   eu-central-1:
-  #     AMI: ami-ac055447
+      AMI: ami-00d4f478
+    us-west-1:
+      AMI: ami-0d438d09af26c9583
+    eu-west-2:
+      AMI: ami-a44db8c3
+    eu-west-3:
+      AMI: ami-07da674f0655ef4e1
+    eu-west-1:
+      AMI: ami-0af844a965e5738db
+    eu-central-1:
+      AMI: ami-0291ba887ba0d515f
+    ap-northeast-2:
+      AMI: ami-047d2a61f94f862dc
+    ap-northeast-1:
+      AMI: ami-0041c416aa23033a2
+    ap-southeast-2:
+      AMI: ami-0092e55c70015d8c3
+    ap-southeast-1:
+      AMI: ami-091bf462afdb02c60
+    ca-central-1:
+      AMI: ami-192fa27d
+    ap-south-1:
+      AMI: ami-0c179ca015d301829
+    sa-east-1:
+      AMI: ami-0018ff8ee48970ac3
+    us-gov-west-1:
+      AMI: ami-c6079ba7
 
 Conditions:
   SSHAccess: !Not [!Equals [ !Ref KeyName, ""]]
@@ -308,7 +292,7 @@ Resources:
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: !Sub ${Namespace}-${NetworkName}
+      ClusterName: !Ref Namespace
 
   ECSLogGroup:
     Type: AWS::Logs::LogGroup
@@ -444,7 +428,7 @@ Resources:
       VPCZoneIdentifier: !Ref ECSSubnets
       # allow remove before replace
       MinSize: 1
-      MaxSize: 1
+      MaxSize: 2
       DesiredCapacity: 1
       Tags:
         - Key: Name
@@ -470,14 +454,13 @@ Resources:
   ALB:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
-      Name: !Ref NetworkName
+      Name: !Ref Namespace
       Subnets: !Ref ALBSubnets
       SecurityGroups:
         - !Ref ALBSecurityGroup
-        # - !Ref ECSSecurityGroup
       Tags:
         - Key: Name
-          Value: !Ref NetworkName
+          Value: !Ref Namespace
 
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -775,7 +758,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      RoleName: !Sub ${Namespace}-service-role
+      RoleName: !Sub ${Namespace}-task-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -961,7 +944,7 @@ Resources:
   UpdateDNSLambdaLogGroup:
     Type: "AWS::Logs::LogGroup"
     Properties:
-      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-${AWS::Region}-${NetworkName}-update-dns
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-${AWS::Region}-update-dns
       RetentionInDays: 3
 
   DNSUpdater:
@@ -977,7 +960,7 @@ Resources:
     Type: AWS::SNS::Topic
     # Condition: Syncing
     Properties:
-      TopicName: !Sub ${AWS::StackName}-${AWS::Region}-${NetworkName}-sync-alarm
+      TopicName: !Sub ${AWS::StackName}-${AWS::Region}-sync-alarm
       Subscription:
         - Protocol: email
           Endpoint: !Ref AlertsEmail
@@ -987,26 +970,16 @@ Outputs:
   ECSSecurityGroup:
     Description: security group for parity and indexer containers
     Value: !Ref ECSSecurityGroup
-    # Export:
-    #   Name: !Sub ${Namespace}-ECSSecurityGroup
 
   ECSCluster:
     Description: cluster with parity and indexer
     Value: !Ref ECSCluster
-    # Export:
-    #   Name: !Sub ${Namespace}-ECSCluster
 
   NameServer:
     Description: NS of created hosted zone
     Value: !Join [ ",", !GetAtt HostedZone.NameServers ]
     Export:
       Name: !Sub ${Namespace}-NameServer
-
-  # AccessSecurityGroup:
-  #   Description: SecurityGroup to access json-rpc
-  #   Value: !Ref AccessSecurityGroup
-  #   Export:
-  #     Name: !Sub ${Namespace}-AccessSecurityGroup
 
   IndexerDNSName:
     Description: DNS name for the indexer
