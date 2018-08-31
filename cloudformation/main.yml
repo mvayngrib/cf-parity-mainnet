@@ -198,18 +198,11 @@ Parameters:
   ReverseProxyRepositoryName:
     Type: String
     Description: Name of ECR repository to use
-    Default: parity
+    Default: nginx-proxy
     AllowedValues:
-      - parity
+      - nginx-proxy
 
   # BEGIN ethereum indexer params
-  RunIndexer:
-    Type: String
-    Description: Run addr->txs indexer
-    Default: 'y'
-    AllowedValues:
-      - 'y'
-      - 'n'
 
   EthIndexerClientRepositoryName:
     Type: String
@@ -248,6 +241,24 @@ Resources:
         PrivateSubnet1CIDR: !Ref PrivateSubnet1CIDR
         PrivateSubnet2CIDR: !Ref PrivateSubnet2CIDR
 
+  # AccessSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     GroupDescription: !Sub ${AWS::StackName}-access-parity-sg
+  #     VpcId: !GetAtt VPC.Outputs.VPC
+
+  # ReverseProxy:
+  #   Type: AWS::CloudFormation::Stack
+  #   Properties:
+  #     TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/proxy.yml
+  #     Parameters:
+  #       Namespace: !Ref AWS::StackName
+  #       VpcId: !GetAtt VPC.Outputs.VPC
+  #       ClusterFamily: !FindInMap [ecs, family, name]
+  #       ClusterName: !FindInMap [ecs, cluster, name]
+  #       RepositoryName: !Ref ReverseProxyRepositoryName
+  #       SecurityGroup: !Ref AccessSecurityGroup
+
   Ethereum:
     Type: AWS::CloudFormation::Stack
     DependsOn: VPC
@@ -257,7 +268,9 @@ Resources:
         Namespace: !Ref AWS::StackName
         VpcId: !GetAtt VPC.Outputs.VPC
         ALBSubnets: !GetAtt VPC.Outputs.PublicSubnets
+        ECSSubnets: !GetAtt VPC.Outputs.PrivateSubnets
         ECSFamily: !FindInMap [ecs, family, name]
+        # AccessSecurityGroup: !Ref AccessSecurityGroup
 
         SyncInstanceType: !Ref SyncInstanceType
         PostSyncInstanceType: !Ref PostSyncInstanceType
@@ -275,21 +288,9 @@ Resources:
         AlertsEmail: !Ref AlertsEmail
         NetworkName: !Ref NetworkName
         InstanceTenancy: !Ref InstanceTenancy
-        RunIndexer: !Ref RunIndexer
         EthIndexerClientRepositoryName: !Ref EthIndexerClientRepositoryName
         IndexerStartBlock: !Ref IndexerStartBlock
         IndexerConfirmationHeight: !Ref IndexerConfirmationHeight
-
-  ReverseProxy:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/proxy.yml
-      Parameters:
-        Namespace: !Ref AWS::StackName
-        VpcId: !GetAtt VPC.Outputs.VPC
-        ECSFamily: !FindInMap [ecs, family, name]
-        ECSCluster: !GetAtt Ethereum.Outputs.ECSCluster
-        RepositoryName: !Ref ReverseProxyRepositoryName
 
 Outputs:
   VPC:

@@ -12,6 +12,10 @@ Parameters:
     Description: subnets to deploy ALB to
     Type: List<AWS::EC2::Subnet::Id>
 
+  ECSSubnets:
+    Description: subnets to run ECS service in
+    Type: List<AWS::EC2::Subnet::Id>
+
   ECSFamily:
     Type: String
 
@@ -114,10 +118,18 @@ Parameters:
     Default: ""
   ParityClientRepositoryName:
     Type: String
-    Description: Name of ECR repository to use
+    Description: parity client ECR repository name
     Default: parity
     AllowedValues:
       - parity
+
+  NginxRepositoryName:
+    Type: String
+    Description: nginx ECR repository name
+    Default: nginx-proxy
+    AllowedValues:
+      - nginx-proxy
+
   DesiredTaskCount:
     Type: Number
     Default: 1
@@ -177,17 +189,10 @@ Parameters:
       - dedicated
 
   # BEGIN ethereum indexer params
-  RunIndexer:
-    Type: String
-    Description: Run addr->txs indexer
-    Default: 'y'
-    AllowedValues:
-      - 'y'
-      - 'n'
 
   EthIndexerClientRepositoryName:
     Type: String
-    Description: Name of ECR repository to use
+    Description: eth-indexer ECR repository name
     Default: eth-indexer
     AllowedValues:
       - eth-indexer
@@ -297,36 +302,41 @@ Mappings:
 Conditions:
   SSHAccess: !Not [!Equals [ !Ref KeyName, ""]]
   Syncing: !Equals [ !Ref ChainSnapshotId, ""]
-  DoRunIndexer: !Equals [ !Ref RunIndexer, "y"]
 
 Resources:
 
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: !Sub ${Namespace}-parity
+      ClusterName: !Sub ${Namespace}-${NetworkName}
 
   ECSLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub ${Namespace}-logs
 
-  AccessSecurityGroup:
+  ALBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: !Sub ${Namespace}-access-parity-sg
+      GroupDescription: !Sub ${Namespace}-alb-sg
       VpcId: !Ref VpcId
-
-  # ALBSecurityGroup:
-  #   Type: AWS::EC2::SecurityGroup
-  #   Properties:
-  #     GroupDescription: !Sub ${Namespace}-access-parity-sg
-  #     VpcId: !Ref VpcId
-  #     SecurityGroupIngress:
-  #       IpProtocol: tcp
-  #       FromPort: 80
-  #       ToPort: 80
-  #       CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+          FromPort: 80
+          ToPort: 80
+        # ssh
+        - !If
+          - SSHAccess
+          -
+            FromPort: 22
+            ToPort: 22
+            CidrIp: 0.0.0.0/0
+            IpProtocol: tcp
+          - !Ref "AWS::NoValue"
+      Tags:
+        - Key: Name
+          Value: !Sub ${Namespace}-load-balancers
 
   ECSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -339,6 +349,13 @@ Resources:
           CidrIp: 0.0.0.0/0
           IpProtocol: tcp
 
+        # public via ALB
+        - FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          IpProtocol: tcp
+        # end indexer ports
+
         # ssh
         - !If
           - SSHAccess
@@ -349,23 +366,13 @@ Resources:
             IpProtocol: tcp
           - !Ref "AWS::NoValue"
 
-        # PRIVATE
+        # PRIVATE, accessible via container links
         - FromPort: 8545
           ToPort: 8545
-          SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
           IpProtocol: tcp
         - FromPort: 8546
           ToPort: 8546
-          SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
           IpProtocol: tcp
-
-        - FromPort: 80
-          ToPort: 80
-          # all
-          CidrIp: 0.0.0.0/0
-          # SourceSecurityGroupId: !GetAtt AccessSecurityGroup.GroupId
-          IpProtocol: tcp
-        # end indexer ports
 
       VpcId: !Ref VpcId
       Tags:
@@ -430,10 +437,11 @@ Resources:
   ECSAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
-      AvailabilityZones:
-        Fn::GetAZs:
-          Ref: "AWS::Region"
+      # AvailabilityZones:
+      #   Fn::GetAZs:
+      #     Ref: "AWS::Region"
       LaunchConfigurationName: !Ref ECSLaunchConfiguration
+      VPCZoneIdentifier: !Ref ECSSubnets
       # allow remove before replace
       MinSize: 1
       MaxSize: 1
@@ -465,12 +473,13 @@ Resources:
       Name: !Ref NetworkName
       Subnets: !Ref ALBSubnets
       SecurityGroups:
-        - !Ref ECSSecurityGroup
+        - !Ref ALBSecurityGroup
+        # - !Ref ECSSecurityGroup
       Tags:
         - Key: Name
           Value: !Ref NetworkName
 
-  IndexerTargetGroup:
+  TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     DependsOn: ALB
     Properties:
@@ -481,18 +490,7 @@ Resources:
       UnhealthyThresholdCount: 10
       HealthCheckPath: /
 
-  # JsonRpcTargetGroup:
-  #   Type: AWS::ElasticLoadBalancingV2::TargetGroup
-  #   DependsOn: ALB
-  #   Properties:
-  #     VpcId: !Ref VpcId
-  #     Port: 8545 # will be overridden when ECS registers a task as a target
-  #     Protocol: HTTP
-  #     HealthCheckIntervalSeconds: 60
-  #     UnhealthyThresholdCount: 10
-  #     HealthCheckPath: /
-
-  IndexerALBListener:
+  ALBListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       LoadBalancerArn: !Ref ALB
@@ -500,22 +498,12 @@ Resources:
       Protocol: HTTP
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref IndexerTargetGroup
+          TargetGroupArn: !Ref TargetGroup
 
-  # JsonRpcALBListener:
-  #   Type: AWS::ElasticLoadBalancingV2::Listener
-  #   Properties:
-  #     LoadBalancerArn: !Ref ALB
-  #     Port: 8545
-  #     Protocol: HTTP
-  #     DefaultActions:
-  #       - Type: forward
-  #         TargetGroupArn: !Ref JsonRpcTargetGroup
-
-  IndexerALBListenerRule:
+  ALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
-      ListenerArn: !Ref IndexerALBListener
+      ListenerArn: !Ref ALBListener
       Priority: 1
       Conditions:
         - Field: path-pattern
@@ -523,21 +511,8 @@ Resources:
             - '/'
             # - '/indexer'
       Actions:
-        - TargetGroupArn: !Ref IndexerTargetGroup
+        - TargetGroupArn: !Ref TargetGroup
           Type: forward
-
-  # JsonRpcALBListenerRule:
-  #   Type: AWS::ElasticLoadBalancingV2::ListenerRule
-  #   Properties:
-  #     ListenerArn: !Ref JsonRpcALBListener
-  #     Priority: 2
-  #     Conditions:
-  #       - Field: path-pattern
-  #         Values:
-  #           - '/rpc'
-  #     Actions:
-  #       - TargetGroupArn: !Ref IndexerTargetGroup # JsonRpcTargetGroup
-  #         Type: forward
 
   ECSLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -816,6 +791,22 @@ Resources:
       TaskRoleArn: !Ref TaskRole
       NetworkMode: bridge
       ContainerDefinitions:
+        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${NginxRepositoryName}:latest
+          Essential: true
+          Cpu: 256
+          Memory: 256
+          Name: nginx-proxy
+          PortMappings:
+            - ContainerPort: 80
+              Protocol: tcp
+          Links:
+            - eth-indexer
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: nginx-proxy
         - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ParityClientRepositoryName}:latest
           Essential: true
           Memory: 3000
@@ -849,45 +840,42 @@ Resources:
           #   - Name: "TARGET_BLOCK"
           #     Value: "1"
 
-        - !If
-          - DoRunIndexer
-          - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EthIndexerClientRepositoryName}:latest
-            Essential: false
-            Memory: 1000
-            MemoryReservation: 512
-            Name: eth-indexer
-            PortMappings:
-              - ContainerPort: 80
-                HostPort: 0
-                Protocol: tcp
-            MountPoints:
-              - ContainerPath: /root/.eth-indexer/
-                SourceVolume: eth-indexes
-            LogConfiguration:
-              LogDriver: awslogs
-              Options:
-                awslogs-group: !Ref ECSLogGroup
-                awslogs-region: !Ref AWS::Region
-                awslogs-stream-prefix: eth-indexer
-            Links:
-              - parity
-            Environment:
-              - Name: 'NODE_NETWORK'
-                Value: !Ref NetworkName
-              - Name: 'NODE_HOST'
-                Value: 'parity'
-              - Name: 'NODE_PORT'
-                Value: '80'
-              # gets stuck periodically otherwise
-              - Name: 'NODE_USE_WS'
-                Value: 'false'
-              - Name: 'START_BLOCK'
-                Value: !Ref IndexerStartBlock
-              - Name: 'CONFIRMATION_HEIGHT'
-                Value: !Ref IndexerConfirmationHeight
-              - Name: 'DEBUG'
-                Value: 'tradle:*'
-          - !Ref "AWS::NoValue"
+        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EthIndexerClientRepositoryName}:latest
+          Essential: false
+          Memory: 1000
+          MemoryReservation: 512
+          Name: eth-indexer
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 0
+              Protocol: tcp
+          MountPoints:
+            - ContainerPath: /root/.eth-indexer/
+              SourceVolume: eth-indexes
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: eth-indexer
+          Links:
+            - parity
+          Environment:
+            - Name: 'NODE_NETWORK'
+              Value: !Ref NetworkName
+            - Name: 'NODE_HOST'
+              Value: 'parity'
+            - Name: 'NODE_PORT'
+              Value: '80'
+            # gets stuck periodically otherwise
+            - Name: 'NODE_USE_WS'
+              Value: 'false'
+            - Name: 'START_BLOCK'
+              Value: !Ref IndexerStartBlock
+            - Name: 'CONFIRMATION_HEIGHT'
+              Value: !Ref IndexerConfirmationHeight
+            - Name: 'DEBUG'
+              Value: 'tradle:*'
 
       Volumes:
         - Host:
@@ -899,7 +887,7 @@ Resources:
 
   ECSService:
     Type: AWS::ECS::Service
-    DependsOn: IndexerALBListener
+    DependsOn: ALBListener
     Properties:
       ServiceName: !Sub ${Namespace}-service
       Cluster: !Ref ECSCluster
@@ -908,7 +896,7 @@ Resources:
       LoadBalancers:
         - ContainerName: eth-indexer
           ContainerPort: 80
-          TargetGroupArn: !Ref IndexerTargetGroup
+          TargetGroupArn: !Ref TargetGroup
         # - ContainerName: parity
         #   ContainerPort: 8545
         #   TargetGroupArn: !Ref JsonRpcTargetGroup
@@ -1014,11 +1002,11 @@ Outputs:
     Export:
       Name: !Sub ${Namespace}-NameServer
 
-  AccessSecurityGroup:
-    Description: SecurityGroup to access json-rpc
-    Value: !Ref AccessSecurityGroup
-    Export:
-      Name: !Sub ${Namespace}-AccessSecurityGroup
+  # AccessSecurityGroup:
+  #   Description: SecurityGroup to access json-rpc
+  #   Value: !Ref AccessSecurityGroup
+  #   Export:
+  #     Name: !Sub ${Namespace}-AccessSecurityGroup
 
   IndexerDNSName:
     Description: DNS name for the indexer

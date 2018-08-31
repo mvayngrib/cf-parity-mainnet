@@ -7,14 +7,22 @@ Parameters:
   VpcId:
     Type: AWS::EC2::VPC::Id
 
-  ECSFamily:
+  ClusterFamily:
     Type: String
 
-  ECSCluster:
+  ClusterName:
     Type: String
 
   RepositoryName:
     Type: String
+
+  Path:
+    Type: String
+    Description: path on which
+
+  SecurityGroup:
+    Type: String
+    Description: security group to use
 
   # S3ConfigPath:
   #   Type: String
@@ -54,7 +62,7 @@ Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !Ref ECSFamily
+      Family: !Ref ClusterFamily
       # TaskRoleArn: !Ref TaskRole
       NetworkMode: bridge
       ContainerDefinitions:
@@ -79,10 +87,10 @@ Resources:
     Properties:
       ListenerArn: !Ref Listener
       Priority: 1
-      # Conditions:
-      #   - Field: host-header
-      #     Values:
-      #       - ${self:custom.config.Host}
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - "/"
       Actions:
         - TargetGroupArn: !Ref TargetGroup
           Type: forward
@@ -142,7 +150,7 @@ Resources:
     Type: AWS::ECS::Service
     Properties:
       ServiceName: !Sub ${Namespace}-reverse-proxy
-      Cluster: !Ref ECSCluster
+      Cluster: !Ref ClusterName
       DesiredCount: 1
       TaskDefinition: !Ref TaskDefinition
       Role: !Ref ServiceRole

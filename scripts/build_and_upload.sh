@@ -36,7 +36,13 @@ set -e
 require jq
 require aws
 
-REPO_NAME=${1-parity}
+if [ -z "$1" ] || [ -z "$2" ];
+then
+    echo "expected repo name and build path as arguments"
+    exit 1
+fi
+
+REPO_NAME="$1"
 REPO_URL=$(get_url $REPO_NAME)
 if [ $REPO_URL == "null" ]; then
     create_repo $REPO_NAME
@@ -46,7 +52,7 @@ if [ $REPO_URL == "null" ]; then
     fi
 fi
 
-BUILD_PATH=./docker
+BUILD_PATH="$2"
 `aws --profile $AWS_PROFILE ecr get-login --no-include-email`
 TAG="$REPO_URL:latest"
 build $TAG $BUILD_PATH
