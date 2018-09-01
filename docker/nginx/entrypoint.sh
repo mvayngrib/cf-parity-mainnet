@@ -9,4 +9,7 @@ else
   echo "\$S3_CONFIG_PATH not set, using default config"
 fi
 
+echo "this is my conf"
+cat /etc/nginx/nginx.conf
+
 nginx -g "daemon off;"

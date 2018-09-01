@@ -60,13 +60,13 @@ Resources:
       VpcId: !Ref VPC
       Port: 80 # will be overridden when ECS registers a task as a target
       Protocol: HTTP
-      # Matcher:
-      #     HttpCode: 200-299
-      # HealthCheckIntervalSeconds: 10
-      # HealthCheckPath: !Ref Path
-      # HealthCheckProtocol: HTTP
-      # HealthCheckTimeoutSeconds: 5
-      # HealthyThresholdCount: 2
+      Matcher:
+        HttpCode: 200-299
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: !Sub /v1/${NetworkName}/health
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
 
   ALBListenerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
@@ -76,7 +76,7 @@ Resources:
       Conditions:
         - Field: path-pattern
           Values:
-            - !Ref Path
+            - !Join ["/", [!Ref Path, "*"]]
       Actions:
         - TargetGroupArn: !Ref TargetGroup
           Type: forward
@@ -222,6 +222,8 @@ Resources:
               Value: 'parity'
             - Name: 'NODE_PORT'
               Value: '3000'
+            # - Name: 'SERVER_BASE_PATH'
+            #   Value: !Ref Path
             # gets stuck periodically otherwise
             - Name: 'NODE_USE_WS'
               Value: 'false'

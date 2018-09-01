@@ -1,17 +1,15 @@
 #!/bin/bash
 
 set -x
-# set -euo pipefail
+set -euo pipefail
 
 source scripts/.env
 
 # relative to build-params.js script
 PARAMS_FILE=${1-"../cloudformation/stack-parameters.json"}
 
+./scripts/validate-templates.sh
 ./scripts/upload-assets.sh
-
-  # \
-  # --acl public-read
 
 PARAMETERS=$(node scripts/build-params.js "$PARAMS_FILE" "$BUCKET/$STACK_NAME")
 CUR_DIR=$(pwd)

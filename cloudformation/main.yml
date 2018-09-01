@@ -234,6 +234,7 @@ Parameters:
 
 Conditions:
   Syncing: !Equals [ !Ref ChainSnapshotId, ""]
+  SSHAccess: !Not [!Equals [ !Ref KeyName, ""]]
 
 Resources:
   VPC:
@@ -247,6 +248,10 @@ Resources:
         PublicSubnet2CIDR: !Ref PublicSubnet2CIDR
         PrivateSubnet1CIDR: !Ref PrivateSubnet1CIDR
         PrivateSubnet2CIDR: !Ref PrivateSubnet2CIDR
+        EnableSSHAccess: !If
+          - SSHAccess
+          - "true"
+          - "false"
 
   SecurityGroups:
     Type: AWS::CloudFormation::Stack
