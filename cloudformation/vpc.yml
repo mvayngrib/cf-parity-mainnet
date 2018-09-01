@@ -30,6 +30,7 @@ Parameters:
 
 Resources:
 
+  # purpose: block out a bunch of addresses
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -39,6 +40,13 @@ Resources:
         - Key: Name
           Value: !Ref Namespace
 
+  # access to the internet
+  #
+  # see: https://stackoverflow.com/questions/38690012/aws-vpc-internet-gateway-vs-nat
+  #
+  #   If a VPC does not have an Internet Gateway, then the resources in the VPC
+  #   cannot be accessed from the Internet (unless the traffic flows via a corporate
+  #   network and VPN/Direct Connect).
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
@@ -46,23 +54,28 @@ Resources:
         - Key: Name
           Value: !Ref Namespace
 
+  # VPC / InternetGateway intersection
   InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       InternetGatewayId: !Ref InternetGateway
       VpcId: !Ref VPC
 
+  # subnet for publically accessible resources:
+  #   - NATGateway
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs '' ]
       CidrBlock: !Ref PublicSubnet1CIDR
+      # instances launched in this subnet receive a public IP address
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
           Value: !Sub ${Namespace} Public Subnet (AZ1)
 
+  # same as PublicSubnet1, but in a 2nd availability zone
   PublicSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -74,6 +87,7 @@ Resources:
         - Key: Name
           Value: !Sub ${Namespace} Public Subnet (AZ2)
 
+  # subnet isolated from the internet
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -85,6 +99,7 @@ Resources:
         - Key: Name
           Value: !Sub ${Namespace} Private Subnet (AZ1)
 
+  # same as PrivateSubnet1, but in a 2nd availability zone
   PrivateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
@@ -95,6 +110,124 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${Namespace} Private Subnet (AZ2)
+
+  # read about route tables here:
+  # https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Route_Tables.html#RouteTables
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${Namespace} Public Routes
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  # PRIVATE SUBNET ROUTING
+  # needed to allow container instances to register with ECS
+  #
+  # see: https://docs.aws.amazon.com/AmazonECS/latest/developerguide/launch_container_instance.html
+  #
+  #   Container instances need external network access to communicate with the
+  #   Amazon ECS service endpoint, so if your container instances do not have
+  #   public IP addresses, then they must use network address translation (NAT)
+  #   to provide this access."
+
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${Namespace} Private Routes (AZ1)
+
+  DefaultPrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${Namespace} Private Routes (AZ2)
+
+  DefaultPrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      SubnetId: !Ref PrivateSubnet2
+
+  # where InternetGateway is used to connect a vpc to the internet,
+  # the NATGateway lives in a public subnet of the vpc,
+  # and is used to connect a private subnet to the internet
+  #
+  #   After you've created a NAT gateway, you must update the route table
+  #   associated with one or more of your private subnets to point
+  #   Internet-bound traffic to the NAT gateway.
+  #   This enables instances in your private subnets to communicate with the internet.
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet2
+
+  # static, public IPv4 address designed for dynamic cloud computing
+  # see: https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html#nat-gateway-basics
+  #
+  # you must associate no more or less than one Elastic IP address with every NAT gateway
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
 
 Outputs:
 
@@ -125,3 +258,8 @@ Outputs:
   PrivateSubnet2:
     Description: A reference to the private subnet in the 2nd Availability Zone
     Value: !Ref PrivateSubnet2
+
+  AvailabilityZones:
+    Description: availability zones of public subnet
+    Value: !Join [",", [!Select [ 0, !GetAZs '' ], !Select [ 1, !GetAZs '' ]]]
+

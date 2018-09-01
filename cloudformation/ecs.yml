@@ -4,252 +4,66 @@ Parameters:
   Namespace:
     Type: String
 
-  VpcId:
-    Description: the VPC to launch the cluster in
-    Type: AWS::EC2::VPC::Id
+  # ECSAMI:
+  #   Description: AMI id
+  #   Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
 
-  ALBSubnets:
-    Description: subnets to deploy ALB to
-    Type: List<AWS::EC2::Subnet::Id>
+  SecurityGroup:
+    Description: security group for ECS hosts
+    Type: AWS::EC2::SecurityGroup::Id
 
-  ECSSubnets:
+  Subnets:
     Description: subnets to run ECS service in
     Type: List<AWS::EC2::Subnet::Id>
 
-  ECSFamily:
+  InstanceType:
     Type: String
+    Description: ECS instance type
 
-  SyncInstanceType:
-    Type: String
-    Description: Instance to sync the chain with for the first time
-    Default: c5.large # 3714 actual memory
-    AllowedValues:
-      - t2.micro
-      - t2.small
-      - t2.medium
-      - t2.large
-      - t2.xlarge
-      - t2.2xlarge
-      - m3.medium
-      - m3.large
-      - m3.xlarge
-      - m3.2xlarge
-      - m4.large
-      - m4.xlarge
-      - m4.2xlarge
-      - m4.4xlarge
-      - m4.10xlarge
-      - r3.large
-      - r3.xlarge
-      - r3.2xlarge
-      - r3.4xlarge
-      - r3.8xlarge
-      - r4.large
-      - r4.xlarge
-      - r4.2xlarge
-      - r4.4xlarge
-      - r4.8xlarge
-      - r4.16xlarge
-      - c4.large
-      - c4.xlarge
-      - c4.2xlarge
-      - c4.4xlarge
-      - c4.8xlarge
-      - c5.large
-      - c5.xlarge
-      - c5.2xlarge
-      - c5.4xlarge
-      - c5.9xlarge
-      - c5.18xlarge
-    ConstraintDescription: Please choose a valid instance type.
-  PostSyncInstanceType:
-    Type: String
-    Description: Instance to use after first sync
-    Default: t2.medium
-    AllowedValues:
-      - t2.micro
-      - t2.small
-      - t2.medium
-      - t2.large
-      - t2.xlarge
-      - t2.2xlarge
-      - m3.medium
-      - m3.large
-      - m3.xlarge
-      - m3.2xlarge
-      - m4.large
-      - m4.xlarge
-      - m4.2xlarge
-      - m4.4xlarge
-      - m4.10xlarge
-      - r3.large
-      - r3.xlarge
-      - r3.2xlarge
-      - r3.4xlarge
-      - r3.8xlarge
-      - r4.large
-      - r4.xlarge
-      - r4.2xlarge
-      - r4.4xlarge
-      - r4.8xlarge
-      - r4.16xlarge
-      - c4.large
-      - c4.xlarge
-      - c4.2xlarge
-      - c4.4xlarge
-      - c4.8xlarge
-      - c5.large
-      - c5.xlarge
-      - c5.2xlarge
-      - c5.4xlarge
-      - c5.9xlarge
-      - c5.18xlarge
-    ConstraintDescription: Please choose a valid instance type.
-  ChainSnapshotId:
+  SnapshotId:
     Type: String
     Description: EBS Snapshot from which to initiate the chain data
     Default: ""
-  DNSName:
+
+  VolumeSize:
+    Type: Number
+    Default: 100
+
+  VolumeType:
     Type: String
-    Description: DNS name to register too
+
+  Iops:
+    Type: Number
+    Default: 2500
+
   KeyName:
     Type: String
     Description: SSH Key name to access the machine
     Default: ""
-  ParityClientRepositoryName:
-    Type: String
-    Description: parity client ECR repository name
-    Default: parity
-    AllowedValues:
-      - parity
 
-  NginxRepositoryName:
+  NetworkName:
     Type: String
-    Description: nginx ECR repository name
-    Default: nginx-proxy
-    AllowedValues:
-      - nginx-proxy
+    Description: The Ethereum network
 
-  DesiredTaskCount:
-    Type: Number
-    Default: 1
-  SyncVolumeType:
-    Type: String
-    Default: io1
-    AllowedValues:
-      - io1
-      - gp2
-      - st1
-      - sc1
-  PostSyncVolumeType:
-    Type: String
-    Default: gp2
-    AllowedValues:
-      - io1
-      - gp2
-      - st1
-      - sc1
-  SyncIops:
-    Type: Number
-    Default: 2500
-  PostSyncIops:
-    Type: Number
-    Default: 300
-  VolumeSize:
-    Type: Number
-    Default: 100
   SyncToBlock:
     Type: Number
     Description: which block number to sync to on the first sync
     MinValue: 1
+
   AlertsEmail:
     Description: get alerted when the first sync is complete and snaphotted
     Type: String
     AllowedPattern: "^[\\x20-\\x45]?[\\w-\\+]+(\\.[\\w]+)*@[\\w-]+(\\.[\\w]+)*(\\.[a-z]{2,})$"
     ConstraintDescription: 'must be a valid email address'
 
-  NetworkName:
-    Type: String
-    Description: The Ethereum network
-    Default: mainnet
-    AllowedValues:
-      # parity doesn't support morden, rinkeby,
-      - mainnet
-      # - morden
-      - ropsten
-      # - rinkeby
-      - kovan
-    ConstraintDescription: invalid network name, specify mainnet, ropsten, or kovan
-
-  InstanceTenancy:
-    Type: String
-    Default: default
-    AllowedValues:
-      - default
-      - dedicated
-
-  # BEGIN ethereum indexer params
-
-  EthIndexerClientRepositoryName:
-    Type: String
-    Description: eth-indexer ECR repository name
-    Default: eth-indexer
-    AllowedValues:
-      - eth-indexer
-
-  IndexerStartBlock:
-    Type: Number
-    Description: which block number to start indexing addrs -> txs from
-    MinValue: 0
-    Default: 0
-
-  IndexerConfirmationHeight:
-    Type: Number
-    Description: height at which indexer considers a block confirmed
-    MinValue: 1
-    Default: 15
-
-  # END ethereum indexer params
-
-  # RunEthExplorer:
-  #   Type: String
-  #   AllowedValues:
-  #     - "y"
-  #     - "n"
-  #   Default: "y"
-  # RunEthStats:
-  #   Type: String
-  #   AllowedValues:
-  #     - "y"
-  #     - "n"
-  #   Default: "y"
+Conditions:
+  SSHAccess: !Not [!Equals [ !Ref KeyName, ""]]
+  Syncing: !Equals [ !Ref SnapshotId, ""]
 
 Mappings:
-  # DefaultSyncToBlock:
-  #   mainnet:
-  #     block: 6200000
-  #   ropsten:
-  #     block: 3896360
-  #   rinkeby:
-  #     block: 2864810
-  #   kovan:
-  #     block: 8469871
-
-  # NetworkNameToConstants:
-  #   mainnet:
-  #     id: 1
-  #   mordern:
-  #     id: 2
-  #   ropsten:
-  #     id: 3
-  #   rinkeby:
-  #     id: 4
-  #   kovan:
-  #     id: 42
-
+  # source:
+  # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-optimized_AMI.html
   AWSRegionToAMI:
-    AMI:
-      AMI: amzn-ami-2017.09.k-amazon-ecs-optimized
     us-east-2:
       AMI: ami-028a9de0a7e353ed9
     us-east-1:
@@ -258,10 +72,10 @@ Mappings:
       AMI: ami-00d4f478
     us-west-1:
       AMI: ami-0d438d09af26c9583
-    eu-west-2:
-      AMI: ami-a44db8c3
     eu-west-3:
       AMI: ami-07da674f0655ef4e1
+    eu-west-2:
+      AMI: ami-a44db8c3
     eu-west-1:
       AMI: ami-0af844a965e5738db
     eu-central-1:
@@ -283,10 +97,6 @@ Mappings:
     us-gov-west-1:
       AMI: ami-c6079ba7
 
-Conditions:
-  SSHAccess: !Not [!Equals [ !Ref KeyName, ""]]
-  Syncing: !Equals [ !Ref ChainSnapshotId, ""]
-
 Resources:
 
   ECSCluster:
@@ -294,74 +104,6 @@ Resources:
     Properties:
       ClusterName: !Ref Namespace
 
-  ECSLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub ${Namespace}-logs
-
-  ALBSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: !Sub ${Namespace}-alb-sg
-      VpcId: !Ref VpcId
-      SecurityGroupIngress:
-        - CidrIp: 0.0.0.0/0
-          IpProtocol: -1
-          FromPort: 80
-          ToPort: 80
-        # ssh
-        - !If
-          - SSHAccess
-          -
-            FromPort: 22
-            ToPort: 22
-            CidrIp: 0.0.0.0/0
-            IpProtocol: tcp
-          - !Ref "AWS::NoValue"
-      Tags:
-        - Key: Name
-          Value: !Sub ${Namespace}-load-balancers
-
-  ECSSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: !Sub ${Namespace}-sg
-      SecurityGroupIngress:
-        # PUBLIC
-        - FromPort: 30303
-          ToPort: 30303
-          CidrIp: 0.0.0.0/0
-          IpProtocol: tcp
-
-        # public via ALB
-        - FromPort: 80
-          ToPort: 80
-          SourceSecurityGroupId: !Ref ALBSecurityGroup
-          IpProtocol: tcp
-        # end indexer ports
-
-        # ssh
-        - !If
-          - SSHAccess
-          -
-            FromPort: 22
-            ToPort: 22
-            CidrIp: 0.0.0.0/0
-            IpProtocol: tcp
-          - !Ref "AWS::NoValue"
-
-        # PRIVATE, accessible via container links
-        - FromPort: 8545
-          ToPort: 8545
-          IpProtocol: tcp
-        - FromPort: 8546
-          ToPort: 8546
-          IpProtocol: tcp
-
-      VpcId: !Ref VpcId
-      Tags:
-        - Key: Name
-          Value: !Sub ${Namespace}-sg
   ECSRole:
     Type: AWS::IAM::Role
     Properties:
@@ -374,34 +116,36 @@ Resources:
               Service: ec2.amazonaws.com
             Action: 'sts:AssumeRole'
 
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        # includes:
+        # - ecs:CreateCluster
+        # - ecs:DeregisterContainerInstance
+        # - ecs:DiscoverPollEndpoint
+        # - ecs:Poll
+        # - ecs:RegisterContainerInstance
+        # - ecs:StartTelemetrySession
+        # - ecs:Submit*
+        # - ecr:GetAuthorizationToken
+        # - ecr:BatchCheckLayerAvailability
+        # - ecr:GetDownloadUrlForLayer
+        # - ecr:BatchGetImage
+        # - logs:PutLogEvents
+        # - logs:CreateLogStream
+
       Policies:
       - PolicyName: ecs-service
         PolicyDocument:
           Statement:
           - Effect: Allow
             Action:
-              - ecs:CreateCluster
-              - ecs:DeregisterContainerInstance
-              - ecs:DiscoverPollEndpoint
-              - ecs:Poll
-              - ecs:RegisterContainerInstance
-              - ecs:StartTelemetrySession
-              - ecs:Submit*
-              - ecr:BatchCheckLayerAvailability
-              - ecr:BatchGetImage
-              - ecr:GetDownloadUrlForLayer
-              - ecr:GetAuthorizationToken
               - ec2:DescribeInstanceStatus
               - ec2:DescribeVolumes
               - ec2:DescribeSnapshots
               - ec2:CreateSnapshot
-              - logs:CreateLogStream
               - logs:CreateLogGroup
-              - logs:PutLogEvents
-              - logs:CreateLogStream
               - logs:DescribeLogGroups
               - logs:DescribeLogStreams
-              - logs:PutLogEvents
               - route53:*
               - cloudformation:DescribeStacks
               - elasticloadbalancing:RegisterTargets
@@ -421,11 +165,9 @@ Resources:
   ECSAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
-      # AvailabilityZones:
-      #   Fn::GetAZs:
-      #     Ref: "AWS::Region"
+      # AvailabilityZones: !Ref AvailabilityZones
       LaunchConfigurationName: !Ref ECSLaunchConfiguration
-      VPCZoneIdentifier: !Ref ECSSubnets
+      VPCZoneIdentifier: !Ref Subnets
       # allow remove before replace
       MinSize: 1
       MaxSize: 2
@@ -451,83 +193,29 @@ Resources:
           - ScheduledActions
         WaitOnResourceSignals: true
 
-  ALB:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Name: !Ref Namespace
-      Subnets: !Ref ALBSubnets
-      SecurityGroups:
-        - !Ref ALBSecurityGroup
-      Tags:
-        - Key: Name
-          Value: !Ref Namespace
-
-  TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    DependsOn: ALB
-    Properties:
-      VpcId: !Ref VpcId
-      Port: 80 # will be overridden when ECS registers a task as a target
-      Protocol: HTTP
-      HealthCheckIntervalSeconds: 60
-      UnhealthyThresholdCount: 10
-      HealthCheckPath: /
-
-  ALBListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref ALB
-      Port: 80
-      Protocol: HTTP
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref TargetGroup
-
-  ALBListenerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      ListenerArn: !Ref ALBListener
-      Priority: 1
-      Conditions:
-        - Field: path-pattern
-          Values:
-            - '/'
-            # - '/indexer'
-      Actions:
-        - TargetGroupArn: !Ref TargetGroup
-          Type: forward
-
   ECSLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
-      ImageId: !FindInMap [AWSRegionToAMI, !Ref "AWS::Region", AMI]
-      InstanceType: !If
-        - Syncing
-        - !Ref SyncInstanceType
-        - !Ref PostSyncInstanceType
+      AssociatePublicIpAddress: !If
+        - SSHAccess
+        - true
+        - false
+      ImageId:  !FindInMap [AWSRegionToAMI, !Ref "AWS::Region", AMI]
+      InstanceType: !Ref InstanceType
       KeyName: !If
         - SSHAccess
         - !Ref KeyName
         - !Ref "AWS::NoValue"
       SecurityGroups:
-        - !Ref ECSSecurityGroup
+        - !Ref SecurityGroup
       IamInstanceProfile: !Ref ECSInstanceProfile
       BlockDeviceMappings:
       - DeviceName: "/dev/sdh"
         Ebs:
-          SnapshotId: !If
-            - Syncing
-            - !Ref "AWS::NoValue"
-            - !Ref ChainSnapshotId
+          SnapshotId: !Ref SnapshotId
           VolumeSize: !Ref VolumeSize
-          VolumeType: !If
-            - Syncing
-            - !Ref SyncVolumeType
-            - !Ref PostSyncVolumeType
-          Iops: !If
-            - Syncing
-            - !Ref SyncIops
-            - !Ref PostSyncIops
+          VolumeType: !Ref VolumeType
+          Iops: !Ref Iops
       UserData:
         "Fn::Base64": !Sub |
           #!/bin/bash
@@ -586,32 +274,32 @@ Resources:
                 state_file = /var/lib/awslogs/agent-state
                 [/var/log/dmesg]
                 file = /var/log/dmesg
-                log_group_name = ${ECSLogGroup}
-                log_stream_name = {instance_id}/var/log/dmesg
+                log_group_name = ${ECSCluster}-/var/log/docker
+                log_stream_name = ${ECSCluster}
                 [/var/log/messages]
                 file = /var/log/messages
-                log_group_name = ${ECSLogGroup}
-                log_stream_name = {instance_id}/var/log/messages
+                log_group_name = ${ECSCluster}-/var/log/docker
+                log_stream_name = ${ECSCluster}
                 datetime_format = %b %d %H:%M:%S
                 [/var/log/docker]
                 file = /var/log/docker
-                log_group_name = ${ECSLogGroup}
-                log_stream_name = {instance_id}/var/log/docker
+                log_group_name = ${ECSCluster}-/var/log/docker
+                log_stream_name = ${ECSCluster}
                 datetime_format = %Y-%m-%dT%H:%M:%S.%f
                 [/var/log/ecs/ecs-init.log]
                 file = /var/log/ecs/ecs-init.log.*
-                log_group_name = ${ECSLogGroup}
-                log_stream_name = {instance_id}/var/log/ecs-init
+                log_group_name = ${ECSCluster}-/var/log/docker
+                log_stream_name = ${ECSCluster}
                 datetime_format = %Y-%m-%dT%H:%M:%SZ
                 [/var/log/ecs/ecs-agent.log]
                 file = /var/log/ecs/ecs-agent.log.*
-                log_group_name = ${ECSLogGroup}
-                log_stream_name = {instance_id}/var/log/ecs/ecs-agent
+                log_group_name = ${ECSCluster}-/var/log/docker
+                log_stream_name = ${ECSCluster}
                 datetime_format = %Y-%m-%dT%H:%M:%SZ
                 [/var/log/ecs/audit.log]
                 file = /var/log/ecs/audit.log.*
-                log_group_name = ${ECSLogGroup}
-                log_stream_name = {instance_id}/var/log/ecs/audit
+                log_group_name = ${ECSCluster}-/var/log/docker
+                log_stream_name = ${ECSCluster}
                 datetime_format = %Y-%m-%dT%H:%M:%SZ
 
             # "/etc/cron.d/mycron":
@@ -678,7 +366,7 @@ Resources:
                   while true;
                   do
                     STATUS=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" | jq -r .Stacks[].StackStatus)
-                    if [ "$STATUS" == "CREATE_COMPLETE" ] || [ "$STATUS" == "UPDATE_COMPLETE" ] || [ "$STATUS" == "ROLLBACK_COMPLETE" ];
+                    if [ "$STATUS" == "CREATE_COMPLETE" ] || [ "$STATUS" == "UPDATE_COMPLETE" ] || [ "$STATUS" == "ROLLBACK_COMPLETE" ] || [ "$STATUS" == " or .StackStatus=="UPDATE_ROLLBACK_COMPLETE"" ];
                     then
                       break
                     elif [ "$STATUS" == "CREATE_IN_PROGRESS" ];
@@ -729,14 +417,14 @@ Resources:
                     --cli-input-json "$PUBLISH_JSON"
                 }
 
-                if [ "${ChainSnapshotId}" == "" ];
+                if [ "${SnapshotId}" == "" ];
                 then
                   echo "will sync, snapshot chaindata and update stack"
                   ensure_stack_ready "$STACK_NAME"
                   sync_to_block "$TARGET_BLOCK"
                   create_snapshot_and_alert
                 else
-                  echo "already working from snapshot: ${ChainSnapshotId}"
+                  echo "already working from snapshot: ${SnapshotId}"
                 fi
 
           services:
@@ -754,208 +442,6 @@ Resources:
                   - /etc/awslogs/awslogs.conf
                   - /etc/awslogs/awscli.conf
 
-  TaskRole:
-    Type: AWS::IAM::Role
-    Properties:
-      Path: /
-      RoleName: !Sub ${Namespace}-task-role
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-
-  TaskDefinition:
-    Type: AWS::ECS::TaskDefinition
-    Properties:
-      Family: !Ref ECSFamily
-      TaskRoleArn: !Ref TaskRole
-      NetworkMode: bridge
-      ContainerDefinitions:
-        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${NginxRepositoryName}:latest
-          Essential: true
-          Cpu: 256
-          Memory: 256
-          Name: nginx-proxy
-          PortMappings:
-            - ContainerPort: 80
-              Protocol: tcp
-          Links:
-            - eth-indexer
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-group: !Ref ECSLogGroup
-              awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: nginx-proxy
-        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ParityClientRepositoryName}:latest
-          Essential: true
-          Memory: 3000
-          MemoryReservation: 1000
-          Name: parity
-          PortMappings:
-            - ContainerPort: 8545
-              HostPort: 0
-              Protocol: tcp
-            - ContainerPort: 8546
-              HostPort: 0
-              Protocol: tcp
-            - ContainerPort: 30303
-              HostPort: 0
-              Protocol: tcp
-            - ContainerPort: 30303
-              HostPort: 0
-              Protocol: udp
-          MountPoints:
-            - ContainerPath: /root/.local/share/io.parity.ethereum/chains
-              SourceVolume: parity-chains
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-group: !Ref ECSLogGroup
-              awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: parity
-          Environment:
-              - Name: 'NETWORK_NAME'
-                Value: !Ref NetworkName
-          #   - Name: "TARGET_BLOCK"
-          #     Value: "1"
-
-        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EthIndexerClientRepositoryName}:latest
-          Essential: false
-          Memory: 1000
-          MemoryReservation: 512
-          Name: eth-indexer
-          PortMappings:
-            - ContainerPort: 80
-              HostPort: 0
-              Protocol: tcp
-          MountPoints:
-            - ContainerPath: /root/.eth-indexer/
-              SourceVolume: eth-indexes
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-group: !Ref ECSLogGroup
-              awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: eth-indexer
-          Links:
-            - parity
-          Environment:
-            - Name: 'NODE_NETWORK'
-              Value: !Ref NetworkName
-            - Name: 'NODE_HOST'
-              Value: 'parity'
-            - Name: 'NODE_PORT'
-              Value: '80'
-            # gets stuck periodically otherwise
-            - Name: 'NODE_USE_WS'
-              Value: 'false'
-            - Name: 'START_BLOCK'
-              Value: !Ref IndexerStartBlock
-            - Name: 'CONFIRMATION_HEIGHT'
-              Value: !Ref IndexerConfirmationHeight
-            - Name: 'DEBUG'
-              Value: 'tradle:*'
-
-      Volumes:
-        - Host:
-            SourcePath: /data/chains
-          Name: parity-chains
-        - Host:
-            SourcePath: /data/indexes
-          Name: eth-indexes
-
-  ECSService:
-    Type: AWS::ECS::Service
-    DependsOn: ALBListener
-    Properties:
-      ServiceName: !Sub ${Namespace}-service
-      Cluster: !Ref ECSCluster
-      DesiredCount: !Ref DesiredTaskCount
-      TaskDefinition: !Ref TaskDefinition
-      LoadBalancers:
-        - ContainerName: eth-indexer
-          ContainerPort: 80
-          TargetGroupArn: !Ref TargetGroup
-        # - ContainerName: parity
-        #   ContainerPort: 8545
-        #   TargetGroupArn: !Ref JsonRpcTargetGroup
-
-      # TaskDefinition: !Join [ "", ['arn:aws:ecs:', !Ref "AWS::Region", ':', !Ref "AWS::AccountId", ':task-definition/parity:1']]
-
-  HostedZone:
-    Type: AWS::Route53::HostedZone
-    Properties:
-      Name: !Ref DNSName
-
-  UpdateDNSLambda:
-    Type: AWS::Lambda::Function
-    Properties:
-      Code:
-        S3Bucket: mvayngrib-serverless-deployment
-        S3Key: !Sub ${Namespace}/lambda.zip
-      FunctionName: !Sub ${Namespace}-update-dns
-      Handler: functions/update-dns.handler
-      MemorySize: 128
-      Role:
-        Fn::GetAtt:
-          - UpdateDNSLambdaExecutionRole
-          - Arn
-      Runtime: nodejs8.10
-      Timeout: 60
-
-  UpdateDNSLambdaExecutionRole:
-    Type: AWS::IAM::Role
-    DependsOn:
-      - ECSService
-
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      Path: '/'
-      Policies:
-      - PolicyName: root
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            Resource: arn:aws:logs:*:*:*
-          - Effect: Allow
-            Action:
-            - ec2:*
-            - ecs:*
-            - route53:*
-            Resource: '*'
-
-  UpdateDNSLambdaLogGroup:
-    Type: "AWS::Logs::LogGroup"
-    Properties:
-      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-${AWS::Region}-update-dns
-      RetentionInDays: 3
-
-  DNSUpdater:
-    Type: Custom::DNSUpdater
-    Properties:
-      ServiceToken: !GetAtt UpdateDNSLambda.Arn
-      cluster: !Ref ECSCluster
-      hostedZone: !Ref HostedZone
-      dnsName: !Ref DNSName
-      snapshotId: !Ref ChainSnapshotId
-
   SyncTopic:
     Type: AWS::SNS::Topic
     # Condition: Syncing
@@ -967,32 +453,14 @@ Resources:
 
 Outputs:
 
-  ECSSecurityGroup:
-    Description: security group for parity and indexer containers
-    Value: !Ref ECSSecurityGroup
-
-  ECSCluster:
+  Cluster:
     Description: cluster with parity and indexer
     Value: !Ref ECSCluster
 
-  NameServer:
-    Description: NS of created hosted zone
-    Value: !Join [ ",", !GetAtt HostedZone.NameServers ]
-    Export:
-      Name: !Sub ${Namespace}-NameServer
+  Role:
+    Description: A reference to ECS service auto scaling role
+    Value: !GetAtt ECSRole.Arn
 
-  IndexerDNSName:
-    Description: DNS name for the indexer
-    Value:
-      !Join ['', [!GetAtt [ ALB, DNSName ], '/']]
-
-  # JsonRpcDNSName:
-  #   Description: DNS name for json-rpc
-  #   Value:
-  #     !Join ['', [!GetAtt [ ALB, DNSName ], '/rpc']]
-
-  # ALBSecurityGroup:
-  #   Description: SecurityGroup to access json-rpc
-  #   Value: !Ref ALBSecurityGroup
-  #   Export:
-  #     Name: !Sub ${Namespace}-ALBSecurityGroup
+  AutoScalingGroup:
+    Description: A reference to ECS AutoScaling Group Name
+    Value: !Ref ECSAutoScalingGroup

@@ -42,5 +42,9 @@
   {
     "ParameterKey": "ChainSnapshotId",
     "ParameterValue": "snap-094c986f94984df4d"
+  },
+  {
+    "ParameterKey": "IndexerStartBlock",
+    "ParameterValue": "300000"
   }
 ]

@@ -34,6 +34,11 @@ Parameters:
 
   # ECS
 
+  # ECSAMI:
+  #   Description: AMI id
+  #   Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+  #   Default: /aws/service/ecs/optimized-ami/amazon-linux/recommended/image_id
+
   SyncInstanceType:
     Type: String
     Description: Instance to sync the chain with for the first time
@@ -188,14 +193,14 @@ Parameters:
       - kovan
     ConstraintDescription: invalid network name, specify mainnet, ropsten, or kovan
 
-  InstanceTenancy:
-    Type: String
-    Default: default
-    AllowedValues:
-      - default
-      - dedicated
+  # InstanceTenancy:
+  #   Type: String
+  #   Default: default
+  #   AllowedValues:
+  #     - default
+  #     - dedicated
 
-  ReverseProxyRepositoryName:
+  NginxRepositoryName:
     Type: String
     Description: Name of ECR repository to use
     Default: nginx-proxy
@@ -204,7 +209,7 @@ Parameters:
 
   # BEGIN ethereum indexer params
 
-  EthIndexerClientRepositoryName:
+  EthIndexerRepositoryName:
     Type: String
     Description: Name of ECR repository to use
     Default: eth-indexer
@@ -223,10 +228,12 @@ Parameters:
     MinValue: 1
     Default: 15
 
-Mappings:
-  ecs:
-    family:
-      name: parity
+  IndexerAPIPath:
+    Type: String
+    Default: /eth
+
+Conditions:
+  Syncing: !Equals [ !Ref ChainSnapshotId, ""]
 
 Resources:
   VPC:
@@ -241,66 +248,104 @@ Resources:
         PrivateSubnet1CIDR: !Ref PrivateSubnet1CIDR
         PrivateSubnet2CIDR: !Ref PrivateSubnet2CIDR
 
-  # AccessSecurityGroup:
-  #   Type: AWS::EC2::SecurityGroup
-  #   Properties:
-  #     GroupDescription: !Sub ${AWS::StackName}-access-parity-sg
-  #     VpcId: !GetAtt VPC.Outputs.VPC
+  SecurityGroups:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/security-groups.yml
+      Parameters:
+        Namespace: !Ref AWS::StackName
+        VPC: !GetAtt VPC.Outputs.VPC
+        KeyName: !Ref KeyName
 
-  # ReverseProxy:
-  #   Type: AWS::CloudFormation::Stack
-  #   Properties:
-  #     TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/proxy.yml
-  #     Parameters:
-  #       Namespace: !Ref AWS::StackName
-  #       VpcId: !GetAtt VPC.Outputs.VPC
-  #       ClusterFamily: !FindInMap [ecs, family, name]
-  #       ClusterName: !FindInMap [ecs, cluster, name]
-  #       RepositoryName: !Ref ReverseProxyRepositoryName
-  #       SecurityGroup: !Ref AccessSecurityGroup
+  ALB:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/load-balancers.yml
+      Parameters:
+        Namespace: !Ref AWS::StackName
+        VPC: !GetAtt VPC.Outputs.VPC
+        Subnets: !GetAtt VPC.Outputs.PublicSubnets
+        SecurityGroup: !GetAtt SecurityGroups.Outputs.LoadBalancerSecurityGroup
+
+  ECS:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/ecs.yml
+      Parameters:
+        Namespace: !Ref AWS::StackName
+        # ECSAMI: !Ref ECSAMI
+        SecurityGroup: !GetAtt SecurityGroups.Outputs.ECSSecurityGroup
+        Subnets: !GetAtt VPC.Outputs.PrivateSubnets
+        InstanceType: !If
+          - Syncing
+          - !Ref SyncInstanceType
+          - !Ref PostSyncInstanceType
+        SnapshotId: !If
+          - Syncing
+          - !Ref "AWS::NoValue"
+          - !Ref ChainSnapshotId
+        VolumeSize: !Ref VolumeSize
+        VolumeType: !If
+          - Syncing
+          - !Ref SyncVolumeType
+          - !Ref PostSyncVolumeType
+        Iops: !If
+          - Syncing
+          - !Ref SyncIops
+          - !Ref PostSyncIops
+        KeyName: !Ref KeyName
+        NetworkName: !Ref NetworkName
+        SyncToBlock: !Ref SyncToBlock
+        AlertsEmail: !Ref AlertsEmail
+        # InstanceTenancy: !Ref InstanceTenancy
 
   Ethereum:
     Type: AWS::CloudFormation::Stack
     DependsOn: VPC
     Properties:
-      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/ecs.yml
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/ethereum.yml
       Parameters:
         Namespace: !Ref AWS::StackName
-        VpcId: !GetAtt VPC.Outputs.VPC
-        ALBSubnets: !GetAtt VPC.Outputs.PublicSubnets
-        ECSSubnets: !GetAtt VPC.Outputs.PrivateSubnets
-        ECSFamily: !FindInMap [ecs, family, name]
-        # AccessSecurityGroup: !Ref AccessSecurityGroup
-
-        SyncInstanceType: !Ref SyncInstanceType
-        PostSyncInstanceType: !Ref PostSyncInstanceType
-        ChainSnapshotId: !Ref ChainSnapshotId
-        DNSName: !Ref DNSName
-        KeyName: !Ref KeyName
-        ParityClientRepositoryName: !Ref ParityClientRepositoryName
+        VPC: !GetAtt VPC.Outputs.VPC
+        Cluster: !GetAtt ECS.Outputs.Cluster
         DesiredTaskCount: !Ref DesiredTaskCount
-        SyncVolumeType: !Ref SyncVolumeType
-        PostSyncVolumeType: !Ref PostSyncVolumeType
-        SyncIops: !Ref SyncIops
-        PostSyncIops: !Ref PostSyncIops
-        VolumeSize: !Ref VolumeSize
-        SyncToBlock: !Ref SyncToBlock
-        AlertsEmail: !Ref AlertsEmail
+        # AvailabilityZones: !GetAtt VPC.Outputs.AvailabilityZones
+        ALBListener: !GetAtt ALB.Outputs.Listener
+        ParityClientRepositoryName: !Ref ParityClientRepositoryName
+        NginxRepositoryName: !Ref NginxRepositoryName
         NetworkName: !Ref NetworkName
-        InstanceTenancy: !Ref InstanceTenancy
-        EthIndexerClientRepositoryName: !Ref EthIndexerClientRepositoryName
+        EthIndexerRepositoryName: !Ref EthIndexerRepositoryName
         IndexerStartBlock: !Ref IndexerStartBlock
         IndexerConfirmationHeight: !Ref IndexerConfirmationHeight
+        Path: !Ref IndexerAPIPath
+
+  # DNS:
+  #   Type: AWS::CloudFormation::Stack
+  #   DependsOn: Ethereum
+  #   Properties:
+  #     TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/dns.yml
+  #     Parameters:
+  #       Namespace: !Ref Namespace
+  #       DNSName: !Ref DNSName
+  #       ECSCluster: !Ref ECSCluster
+  #       ChainSnapshotId: !Ref ChainSnapshotId
 
 Outputs:
   VPC:
     Description: A reference to the created VPC
     Value: !GetAtt VPC.Outputs.VPC
 
-  IndexerDNSName:
+  EthDNSName:
     Description: indexer DNS name
-    Value: !GetAtt Ethereum.Outputs.IndexerDNSName
+    Value: !Join ["", [!GetAtt ALB.Outputs.LoadBalancerUrl, !Ref IndexerAPIPath]]
 
-  JsonRpcDNSName:
-    Description: indexer DNS name
-    Value: !GetAtt Ethereum.Outputs.JsonRpcDNSName
+  ECSCluster:
+    Description: ECS cluster
+    Value: !GetAtt ECS.Outputs.Cluster
+
+  EthECSService:
+    Value: !GetAtt Ethereum.Outputs.ECSService
+
+  # JsonRpcDNSName:
+  #   Description: indexer DNS name
+  #   Value: !GetAtt Ethereum.Outputs.JsonRpcDNSName

@@ -1,0 +1,258 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECS cluster running single Parity node
+Parameters:
+  Namespace:
+    Type: String
+
+  VPC:
+    Description: the VPC to launch the cluster in
+    Type: AWS::EC2::VPC::Id
+
+  Cluster:
+    Description: Please provide the ECS Cluster ID that this service should run on
+    Type: String
+
+  DesiredTaskCount:
+    Description: How many instances of this task should we run across our cluster?
+    Type: Number
+    Default: 1
+
+  ALBListener:
+    Description: The Application Load Balancer listener to register with
+    Type: String
+
+  Path:
+    Description: The path to register with the Application Load Balancer
+    Type: String
+
+  ParityClientRepositoryName:
+    Type: String
+    Description: parity client ECR repository name
+
+  EthIndexerRepositoryName:
+    Type: String
+    Description: ethereum indexer ECR repository name
+
+  NginxRepositoryName:
+    Type: String
+    Description: nginx ECR repository name
+
+  NetworkName:
+    Type: String
+    Description: The Ethereum network
+
+  IndexerStartBlock:
+    Type: Number
+    Description: which block number to start indexing addrs -> txs from
+    MinValue: 0
+    Default: 0
+
+  IndexerConfirmationHeight:
+    Type: Number
+    Description: height at which indexer considers a block confirmed
+    MinValue: 1
+    Default: 15
+
+Resources:
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref VPC
+      Port: 80 # will be overridden when ECS registers a task as a target
+      Protocol: HTTP
+      # Matcher:
+      #     HttpCode: 200-299
+      # HealthCheckIntervalSeconds: 10
+      # HealthCheckPath: !Ref Path
+      # HealthCheckProtocol: HTTP
+      # HealthCheckTimeoutSeconds: 5
+      # HealthyThresholdCount: 2
+
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref ALBListener
+      Priority: 2
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - !Ref Path
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBListenerRule
+    Properties:
+      # custom name makes it hard to update the stack, giving errors like this:
+      #
+      #   CloudFormation cannot update a stack when a custom-named resource requires replacing.
+      #   Rename parity-ropsten-1|parity-ropsten-1-service and update the stack again.
+      #
+      # ServiceName: !Sub ${Namespace}-service
+      Cluster: !Ref Cluster
+      Role: !Ref ServiceRole
+      DesiredCount: !Ref DesiredTaskCount
+      TaskDefinition: !Ref TaskDefinition
+      LoadBalancers:
+        - ContainerName: nginx-proxy
+          ContainerPort: 80
+          TargetGroupArn: !Ref TargetGroup
+
+  ServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub ${Namespace}-nginx-service-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - elasticloadbalancing:Describe*
+                  - elasticloadbalancing:DeregisterInstancesFromLoadBalancer
+                  - elasticloadbalancing:RegisterInstancesWithLoadBalancer
+                  - ec2:Describe*
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - elasticloadbalancing:RegisterTargets
+                  - elasticloadbalancing:DeregisterTargets
+                Resource: '*'
+
+  # TaskRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     Path: /
+  #     RoleName: !Sub ${Namespace}-task-role
+  #     AssumeRolePolicyDocument:
+  #       Version: "2012-10-17"
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service: ecs-tasks.amazonaws.com
+  #           Action: sts:AssumeRole
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: eth
+      # TaskRoleArn: !Ref TaskRole
+      NetworkMode: bridge
+      ContainerDefinitions:
+        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${NginxRepositoryName}:latest
+          Essential: true
+          Cpu: 256
+          Memory: 256
+          Name: nginx-proxy
+          PortMappings:
+            - ContainerPort: 80
+              Protocol: tcp
+          Links:
+            - eth-indexer
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: nginx-proxy
+        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ParityClientRepositoryName}:latest
+          Essential: true
+          Memory: 3000
+          MemoryReservation: 1000
+          Name: parity
+          PortMappings:
+            - ContainerPort: 8545
+              HostPort: 0
+              Protocol: tcp
+            - ContainerPort: 8546
+              HostPort: 0
+              Protocol: tcp
+            - ContainerPort: 30303
+              HostPort: 0
+              Protocol: tcp
+            - ContainerPort: 30303
+              HostPort: 0
+              Protocol: udp
+          MountPoints:
+            - ContainerPath: /root/.local/share/io.parity.ethereum/chains
+              SourceVolume: parity-chains
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: parity
+          Environment:
+              - Name: 'NETWORK_NAME'
+                Value: !Ref NetworkName
+          #   - Name: "TARGET_BLOCK"
+          #     Value: "1"
+
+        - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EthIndexerRepositoryName}:latest
+          Essential: false
+          Memory: 1000
+          MemoryReservation: 512
+          Name: eth-indexer
+          PortMappings:
+            - ContainerPort: 3000
+              HostPort: 0
+              Protocol: tcp
+          MountPoints:
+            - ContainerPath: /root/.eth-indexer/
+              SourceVolume: eth-indexes
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: eth-indexer
+          Links:
+            - parity
+          Environment:
+            - Name: 'NODE_NETWORK'
+              Value: !Ref NetworkName
+            - Name: 'NODE_HOST'
+              Value: 'parity'
+            - Name: 'NODE_PORT'
+              Value: '3000'
+            # gets stuck periodically otherwise
+            - Name: 'NODE_USE_WS'
+              Value: 'false'
+            - Name: 'START_BLOCK'
+              Value: !Ref IndexerStartBlock
+            - Name: 'CONFIRMATION_HEIGHT'
+              Value: !Ref IndexerConfirmationHeight
+            - Name: 'DEBUG'
+              Value: 'tradle:*'
+
+      Volumes:
+        - Host:
+            SourcePath: /data/chains
+          Name: parity-chains
+        - Host:
+            SourcePath: /data/indexes
+          Name: eth-indexes
+
+        # - ContainerName: parity
+        #   ContainerPort: 8545
+        #   TargetGroupArn: !Ref JsonRpcTargetGroup
+
+      # TaskDefinition: !Join [ "", ['arn:aws:ecs:', !Ref "AWS::Region", ':', !Ref "AWS::AccountId", ':task-definition/parity:1']]
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref AWS::StackName
+      RetentionInDays: 1
+
+Outputs:
+  ECSService:
+    Description: ECS service for Ethereum indexer and full node
+    Value: !Ref ECSService
