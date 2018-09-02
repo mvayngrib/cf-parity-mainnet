@@ -5,53 +5,46 @@ Parameters:
     Type: String
 
   VPC:
-    Description: the VPC to launch the cluster in
     Type: AWS::EC2::VPC::Id
 
   Cluster:
-    Description: Please provide the ECS Cluster ID that this service should run on
     Type: String
 
   DesiredTaskCount:
-    Description: How many instances of this task should we run across our cluster?
     Type: Number
-    Default: 1
 
   ALBListener:
-    Description: The Application Load Balancer listener to register with
+    Description: Application Load Balancer listener to register with
     Type: String
 
   Path:
-    Description: The path to register with the Application Load Balancer
+    Description: path to register with the Application Load Balancer
     Type: String
 
   ParityClientRepositoryName:
     Type: String
-    Description: parity client ECR repository name
 
   EthIndexerRepositoryName:
     Type: String
-    Description: ethereum indexer ECR repository name
 
   NginxRepositoryName:
     Type: String
-    Description: nginx ECR repository name
 
   NetworkName:
     Type: String
-    Description: The Ethereum network
 
   IndexerStartBlock:
     Type: Number
-    Description: which block number to start indexing addrs -> txs from
-    MinValue: 0
-    Default: 0
 
   IndexerConfirmationHeight:
     Type: Number
-    Description: height at which indexer considers a block confirmed
-    MinValue: 1
-    Default: 15
+
+  IndexerAPIKeyS3Path:
+    Type: String
+    Default: ""
+
+# Conditions:
+#   ApiIsPrivate: !Not [!Equals [!Ref IndexerAPIKeyS3Path, ""]]
 
 Resources:
   TargetGroup:
@@ -162,6 +155,10 @@ Resources:
               awslogs-group: !Ref LogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: nginx-proxy
+          Environment:
+            - Name: 'S3_PATH_TO_API_KEY'
+              Value: !Ref IndexerAPIKeyS3Path
+
         - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ParityClientRepositoryName}:latest
           Essential: true
           Memory: 3000

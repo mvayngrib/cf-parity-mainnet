@@ -142,13 +142,16 @@ Parameters:
     Default: ""
   ParityClientRepositoryName:
     Type: String
-    Description: Name of ECR repository to use
+    Description: parity client ECR repository name
     Default: parity
     AllowedValues:
       - parity
+
   DesiredTaskCount:
     Type: Number
+    Description: how many instances of the parity + eth-indexer task should we run across our cluster?
     Default: 1
+
   SyncVolumeType:
     Type: String
     Default: io1
@@ -206,7 +209,7 @@ Parameters:
 
   NginxRepositoryName:
     Type: String
-    Description: Name of ECR repository to use
+    Description: nginx ECR repository name
     Default: nginx-proxy
     AllowedValues:
       - nginx-proxy
@@ -215,7 +218,7 @@ Parameters:
 
   EthIndexerRepositoryName:
     Type: String
-    Description: Name of ECR repository to use
+    Description: eth-indexer ECR repository name
     Default: eth-indexer
     AllowedValues:
       - eth-indexer
@@ -235,6 +238,11 @@ Parameters:
   IndexerAPIPath:
     Type: String
     Default: /eth
+
+  IndexerAPIKeyS3Path:
+    Type: String
+    Description: if this is a private api, provide a path to an API key file in S3
+    Default: ""
 
 Conditions:
   Syncing: !Equals [ !Ref ChainSnapshotId, ""]
@@ -326,6 +334,7 @@ Resources:
         EthIndexerRepositoryName: !Ref EthIndexerRepositoryName
         IndexerStartBlock: !Ref IndexerStartBlock
         IndexerConfirmationHeight: !Ref IndexerConfirmationHeight
+        IndexerAPIKeyS3Path: !Ref IndexerAPIKeyS3Path
         Path: !Ref IndexerAPIPath
 
   # DNS:
