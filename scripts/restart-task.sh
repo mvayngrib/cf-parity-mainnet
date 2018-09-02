@@ -3,7 +3,7 @@
 set -x
 set -euo pipefail
 
-source scripts/.env
+source scripts/env.sh
 
 cf() {
   aws --profile "$AWS_PROFILE" cloudformation $@

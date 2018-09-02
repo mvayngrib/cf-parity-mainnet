@@ -15,9 +15,9 @@ const log = (...args) => console.log(...args)
 const prettify = obj => JSON.stringify(obj, null, 2)
 const prettyPrint = obj => log(prettify(obj))
 
-const loadEnv = () => fs.readFileSync(path.join(__dirname, '.env'), { encoding: 'utf-8' })
+const loadEnv = () => fs.readFileSync(path.join(__dirname, 'env.sh'), { encoding: 'utf-8' })
   .split('\n')
-  .map(s => s.trim().split('='))
+  .map(s => s.replace(/^export\s+/, '').trim().split('='))
   .reduce((map, [k, v]) => {
     map[k] = v
     return map

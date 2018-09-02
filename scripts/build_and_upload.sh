@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-source scripts/.env
+source scripts/env.sh
 
 require() {
     command -v "$1" > /dev/null 2>&1 || {
@@ -12,14 +12,14 @@ require() {
 
 get_url() {
     REPO_NAME=$1
-    OUT=$(aws --profile "$AWS_PROFILE" ecr describe-repositories --repository-name=$REPO_NAME 2> /dev/null || echo "{}")
+    OUT=$(aws ecr describe-repositories --repository-name=$REPO_NAME 2> /dev/null || echo "{}")
     echo $OUT | jq -r ".repositories[0].repositoryUri"
 }
 
 create_repo() {
     REPO_NAME=$1
     echo "Creating ECR repository $REPO_NAME"
-    aws --profile "$AWS_PROFILE" ecr create-repository --repository-name $REPO_NAME
+    aws ecr create-repository --repository-name $REPO_NAME
 }
 
 build () {
@@ -53,7 +53,7 @@ if [ $REPO_URL == "null" ]; then
 fi
 
 BUILD_PATH="$2"
-`aws --profile $AWS_PROFILE ecr get-login --no-include-email`
+`aws ecr get-login --no-include-email`
 TAG="$REPO_URL:latest"
 build $TAG $BUILD_PATH
 upload $TAG

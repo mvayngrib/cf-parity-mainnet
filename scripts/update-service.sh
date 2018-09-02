@@ -3,7 +3,7 @@
 set -x
 # set -euo pipefail
 
-source scripts/.env
+source scripts/env.sh
 
 OUTPUTS=$(aws --profile "$AWS_PROFILE" cloudformation describe-stacks \
   --stack-name "$STACK_NAME" | jq -r .Stacks[].Outputs)
