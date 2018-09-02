@@ -43,8 +43,8 @@ Parameters:
     Type: String
     Default: ""
 
-# Conditions:
-#   ApiIsPrivate: !Not [!Equals [!Ref IndexerAPIKeyS3Path, ""]]
+Conditions:
+  ApiIsPrivate: !Not [!Equals [!Ref IndexerAPIKeyS3Path, ""]]
 
 Resources:
   TargetGroup:
@@ -56,7 +56,7 @@ Resources:
       Matcher:
         HttpCode: 200-299
       HealthCheckIntervalSeconds: 10
-      HealthCheckPath: !Sub /v1/${NetworkName}/health
+      HealthCheckPath: !Sub /health
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
@@ -119,24 +119,37 @@ Resources:
                   - elasticloadbalancing:DeregisterTargets
                 Resource: '*'
 
-  # TaskRole:
-  #   Type: AWS::IAM::Role
-  #   Properties:
-  #     Path: /
-  #     RoleName: !Sub ${Namespace}-task-role
-  #     AssumeRolePolicyDocument:
-  #       Version: "2012-10-17"
-  #       Statement:
-  #         - Effect: Allow
-  #           Principal:
-  #             Service: ecs-tasks.amazonaws.com
-  #           Action: sts:AssumeRole
+  TaskRole:
+    Type: AWS::IAM::Role
+    Condition: ApiIsPrivate
+    Properties:
+      Path: /
+      RoleName: !Sub ${Namespace}-task-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: api-key-access
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:HeadObject
+                  - s3:GetObject
+                Resource: !Sub arn:aws:s3:::${IndexerAPIKeyS3Path}
 
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: eth
-      # TaskRoleArn: !Ref TaskRole
+      TaskRoleArn: !If
+        - ApiIsPrivate
+        - !Ref TaskRole
+        - !Ref "AWS::NoValue"
       NetworkMode: bridge
       ContainerDefinitions:
         - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${NginxRepositoryName}:latest
@@ -156,8 +169,12 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: nginx-proxy
           Environment:
+            - Name: 'ETH_INDEXER_HOST'
+              Value: eth-indexer:3000
             - Name: 'S3_PATH_TO_API_KEY'
               Value: !Ref IndexerAPIKeyS3Path
+            - Name: 'ETH_NETWORK'
+              Value: !Ref NetworkName
 
         - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ParityClientRepositoryName}:latest
           Essential: true
@@ -193,7 +210,7 @@ Resources:
           #     Value: "1"
 
         - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EthIndexerRepositoryName}:latest
-          Essential: false
+          Essential: true
           Memory: 1000
           MemoryReservation: 512
           Name: eth-indexer

@@ -45,6 +45,10 @@
   },
   {
     "ParameterKey": "IndexerStartBlock",
-    "ParameterValue": "300000"
+    "ParameterValue": "3000000"
+  },
+  {
+    "ParameterKey": "IndexerAPIKeyS3Path",
+    "ParameterValue": "mvayngrib-serverless-deployment/eth-indexer-api-key"
   }
 ]

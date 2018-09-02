@@ -25,7 +25,9 @@ services:
     ports:
       - 9876:80
     environment:
+      ETH_NETWORK: ropsten
       ETH_INDEXER_HOST: eth-indexer:3000
+      ETH_INDEXER_API_KEY: blah
 
   eth-indexer:
     image: '404247308186.dkr.ecr.us-east-1.amazonaws.com/eth-indexer:latest'

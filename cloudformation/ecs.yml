@@ -170,7 +170,7 @@ Resources:
       VPCZoneIdentifier: !Ref Subnets
       # allow remove before replace
       MinSize: 1
-      MaxSize: 2
+      MaxSize: 1
       DesiredCapacity: 1
       Tags:
         - Key: Name
