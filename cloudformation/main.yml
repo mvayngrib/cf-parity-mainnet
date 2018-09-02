@@ -2,6 +2,10 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: root stack for parity in ECS
 Parameters:
 
+  Namespace:
+    Type: String
+    Default: ""
+
   S3TemplatesPath:
     Type: String
 
@@ -242,7 +246,7 @@ Resources:
     Properties:
       TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/vpc.yml
       Parameters:
-        Namespace: !Ref AWS::StackName
+        Namespace: !Join ["", [!Ref Namespace, !Ref "AWS::StackName"]]
         VpcCIDR: !Ref VpcCIDR
         PublicSubnet1CIDR: !Ref PublicSubnet1CIDR
         PublicSubnet2CIDR: !Ref PublicSubnet2CIDR
@@ -258,7 +262,7 @@ Resources:
     Properties:
       TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/security-groups.yml
       Parameters:
-        Namespace: !Ref AWS::StackName
+        Namespace: !Join ["", [!Ref Namespace, !Ref "AWS::StackName"]]
         VPC: !GetAtt VPC.Outputs.VPC
         KeyName: !Ref KeyName
 
@@ -267,7 +271,7 @@ Resources:
     Properties:
       TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/load-balancers.yml
       Parameters:
-        Namespace: !Ref AWS::StackName
+        Namespace: !Join ["", [!Ref Namespace, !Ref "AWS::StackName"]]
         VPC: !GetAtt VPC.Outputs.VPC
         Subnets: !GetAtt VPC.Outputs.PublicSubnets
         SecurityGroup: !GetAtt SecurityGroups.Outputs.LoadBalancerSecurityGroup
@@ -277,7 +281,7 @@ Resources:
     Properties:
       TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/ecs.yml
       Parameters:
-        Namespace: !Ref AWS::StackName
+        Namespace: !Join ["", [!Ref Namespace, !Ref "AWS::StackName"]]
         # ECSAMI: !Ref ECSAMI
         SecurityGroup: !GetAtt SecurityGroups.Outputs.ECSSecurityGroup
         Subnets: !GetAtt VPC.Outputs.PrivateSubnets
@@ -310,7 +314,7 @@ Resources:
     Properties:
       TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/ethereum.yml
       Parameters:
-        Namespace: !Ref AWS::StackName
+        Namespace: !Join ["", [!Ref Namespace, !Ref "AWS::StackName"]]
         VPC: !GetAtt VPC.Outputs.VPC
         Cluster: !GetAtt ECS.Outputs.Cluster
         DesiredTaskCount: !Ref DesiredTaskCount
