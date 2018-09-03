@@ -62,6 +62,11 @@ Resources:
           IpProtocol: tcp
           FromPort: 80
           ToPort: 80
+        # SSH
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
       Tags:
         - Key: Name
           Value: !Sub ${Namespace}-load-balancers

@@ -78,6 +78,11 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: ALBListenerRule
     Properties:
+      # DeploymentConfiguration:
+      #   MaximumPercent: 100
+      #   # allow ECS to undeploy first
+      #   MinimumHealthyPercent: 0
+
       # custom name makes it hard to update the stack, giving errors like this:
       #
       #   CloudFormation cannot update a stack when a custom-named resource requires replacing.

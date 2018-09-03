@@ -144,6 +144,7 @@ Resources:
               - ec2:DescribeVolumes
               - ec2:DescribeSnapshots
               - ec2:CreateSnapshot
+              - ec2:AttachVolume
               - logs:CreateLogGroup
               - logs:DescribeLogGroups
               - logs:DescribeLogStreams
@@ -234,10 +235,10 @@ Resources:
       - DataVolume1
       - DataVolume2
     Properties:
-      AssociatePublicIpAddress: !If
-        - SSHAccess
-        - true
-        - false
+      # limitation inherited from https://github.com/rumblefishdev/cf-parity-mainnet
+      #   The node needs to now its public IP,
+      #   as this is used as enode identifier broadcasted to other nodes.
+      AssociatePublicIpAddress: true
       ImageId:  !FindInMap [AWSRegionToAMI, !Ref "AWS::Region", AMI]
       InstanceType: !Ref InstanceType
       KeyName: !If
@@ -268,6 +269,7 @@ Resources:
           packages:
             yum:
               awslogs: []
+              nano: []
           commands:
             01_add_instance_to_cluster:
               command: !Sub echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
@@ -371,7 +373,7 @@ Resources:
                 echo "AWS_INSTANCE_ID: $AWS_INSTANCE_ID"
 
                 VOLUMES=$(aws ec2 describe-volumes \
-                  --volume-ids "${DataVolume1}" "${DataVolume2}"
+                  --volume-ids "${DataVolume1}" "${DataVolume2}" \
                   --filters "Name=availability-zone,Values=$EC2_AVAIL_ZONE" | jq -c .)
 
                 echo "VOLUMES: $VOLUMES"
