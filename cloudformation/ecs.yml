@@ -59,6 +59,7 @@ Parameters:
 Conditions:
   SSHAccess: !Not [!Equals [ !Ref KeyName, ""]]
   Syncing: !Equals [ !Ref SnapshotId, ""]
+  IopsSupported: !Equals [!Ref  VolumeType, "io1"]
 
 Mappings:
   # source:
@@ -154,6 +155,10 @@ Resources:
           - Effect: Allow
             Action: sns:Publish
             Resource: !Ref SyncTopic
+          - Effect: Allow
+            Action:
+              - cloudformation:DescribeStackResources
+            Resource: !Ref "AWS::StackId"
 
   ECSInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -170,7 +175,7 @@ Resources:
       VPCZoneIdentifier: !Ref Subnets
       # allow remove before replace
       MinSize: 1
-      MaxSize: 1
+      MaxSize: 2
       DesiredCapacity: 1
       Tags:
         - Key: Name
@@ -193,8 +198,41 @@ Resources:
           - ScheduledActions
         WaitOnResourceSignals: true
 
+  DataVolume1:
+    Type: AWS::EC2::Volume
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Iops: !If
+        - IopsSupported
+        - !Ref Iops
+        - !Ref "AWS::NoValue"
+      Size: !Ref VolumeSize
+      VolumeType: !Ref VolumeType
+      SnapshotId: !Ref SnapshotId
+      Tags:
+        - Key: StackId
+          Value: !Ref "AWS::StackId"
+
+  DataVolume2:
+    Type: AWS::EC2::Volume
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Iops: !If
+        - IopsSupported
+        - !Ref Iops
+        - !Ref "AWS::NoValue"
+      Size: !Ref VolumeSize
+      VolumeType: !Ref VolumeType
+      SnapshotId: !Ref SnapshotId
+      Tags:
+        - Key: StackId
+          Value: !Ref "AWS::StackId"
+
   ECSLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
+    DependsOn:
+      - DataVolume1
+      - DataVolume2
     Properties:
       AssociatePublicIpAddress: !If
         - SSHAccess
@@ -209,13 +247,13 @@ Resources:
       SecurityGroups:
         - !Ref SecurityGroup
       IamInstanceProfile: !Ref ECSInstanceProfile
-      BlockDeviceMappings:
-      - DeviceName: "/dev/sdh"
-        Ebs:
-          SnapshotId: !Ref SnapshotId
-          VolumeSize: !Ref VolumeSize
-          VolumeType: !Ref VolumeType
-          Iops: !Ref Iops
+      # BlockDeviceMappings:
+      # - DeviceName: "/dev/sdh"
+      #   Ebs:
+      #     SnapshotId: !Ref SnapshotId
+      #     VolumeSize: !Ref VolumeSize
+      #     VolumeType: !Ref VolumeType
+      #     Iops: !Ref Iops
       UserData:
         "Fn::Base64": !Sub |
           #!/bin/bash
@@ -233,15 +271,18 @@ Resources:
           commands:
             01_add_instance_to_cluster:
               command: !Sub echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
-            02_mkdir:
+            02_attach_volume:
+              command: "/usr/local/bin/attach-volume.sh"
+              test: "[ ! -d /dev/sdh ]"
+            03_mkdir:
               command: "mkdir /data"
               test: "[ ! -d /data ]"
-            03_mkfs:
+            04_mkfs:
               command: !If [ Syncing, "mkfs.ext4 /dev/sdh", "echo 'not running mkfs /dev/sdh'"]
-            04_mount:
+            05_mount:
               command: "mount /dev/sdh /data"
               test: "! mountpoint -q /data"
-            05_watch_update:
+            06_watch_update:
               command: !If
                 - Syncing
                 - "nohup /usr/local/bin/sync-and-alert.sh >> /var/log/sync_monitor.log 2>&1 &"
@@ -274,11 +315,11 @@ Resources:
                 state_file = /var/lib/awslogs/agent-state
                 [/var/log/dmesg]
                 file = /var/log/dmesg
-                log_group_name = ${ECSCluster}-/var/log/docker
+                log_group_name = ${ECSCluster}-/var/log/dmesg
                 log_stream_name = ${ECSCluster}
                 [/var/log/messages]
                 file = /var/log/messages
-                log_group_name = ${ECSCluster}-/var/log/docker
+                log_group_name = ${ECSCluster}-/var/log/messages
                 log_stream_name = ${ECSCluster}
                 datetime_format = %b %d %H:%M:%S
                 [/var/log/docker]
@@ -288,17 +329,17 @@ Resources:
                 datetime_format = %Y-%m-%dT%H:%M:%S.%f
                 [/var/log/ecs/ecs-init.log]
                 file = /var/log/ecs/ecs-init.log.*
-                log_group_name = ${ECSCluster}-/var/log/docker
+                log_group_name = ${ECSCluster}-/var/log/ecs/ecs-init.log
                 log_stream_name = ${ECSCluster}
                 datetime_format = %Y-%m-%dT%H:%M:%SZ
                 [/var/log/ecs/ecs-agent.log]
                 file = /var/log/ecs/ecs-agent.log.*
-                log_group_name = ${ECSCluster}-/var/log/docker
+                log_group_name = ${ECSCluster}-/var/log/ecs/ecs-agent.log
                 log_stream_name = ${ECSCluster}
                 datetime_format = %Y-%m-%dT%H:%M:%SZ
                 [/var/log/ecs/audit.log]
                 file = /var/log/ecs/audit.log.*
-                log_group_name = ${ECSCluster}-/var/log/docker
+                log_group_name = ${ECSCluster}-/var/log/ecs/audit.log
                 log_stream_name = ${ECSCluster}
                 datetime_format = %Y-%m-%dT%H:%M:%SZ
 
@@ -308,6 +349,68 @@ Resources:
             #     group: root
             #     content: |
             #       * * * * * root /usr/local/bin/sync-and-alert.sh
+
+            "/usr/local/bin/attach-volume.sh":
+              mode: "000755"
+              owner: root
+              group: root
+              content: !Sub |
+                set -x
+                set -euo pipefail
+
+                wait_till_available() {
+                  aws ec2 wait volume-available --volume-ids "$1"
+                }
+
+                export AWS_DEFAULT_REGION="${AWS::Region}"
+                DEVICE="/dev/sdh"
+                EC2_AVAIL_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
+                echo "EC2_AVAIL_ZONE: $EC2_AVAIL_ZONE"
+
+                AWS_INSTANCE_ID=$(curl http://169.254.169.254/latest/meta-data/instance-id)
+                echo "AWS_INSTANCE_ID: $AWS_INSTANCE_ID"
+
+                VOLUMES=$(aws ec2 describe-volumes \
+                  --volume-ids "${DataVolume1}" "${DataVolume2}"
+                  --filters "Name=availability-zone,Values=$EC2_AVAIL_ZONE" | jq -c .)
+
+                echo "VOLUMES: $VOLUMES"
+
+                VOLUME_ID=$(echo "$VOLUMES" | jq -r '.Volumes[].VolumeId')
+                echo "VOLUME_ID: $VOLUME_ID"
+
+                VOLUME_MATCHES=$(echo "$VOLUMES" | jq -r '.Volumes | length')
+                echo "VOLUME_MATCHES: $VOLUME_MATCHES"
+
+                if [ $VOLUME_MATCHES != "1" ];
+                then
+                  echo "multiple volumes matched: $VOLUME_ID"
+                  exit 1
+                fi
+
+                wait_till_available "$VOLUME_ID"
+
+                echo "volume available: $VOLUME_ID"
+                aws ec2 attach-volume \
+                  --device "$DEVICE" \
+                  --instance-id "$AWS_INSTANCE_ID" \
+                  --volume-id "$VOLUME_ID"
+
+                echo "attaching volume: $VOLUME_ID"
+
+                # Wait for the EBS volume to show up
+                while [ ! -e "$DEVICE" ];
+                do
+                  echo Waiting for EBS volume to attach
+                  sleep 5
+                done
+
+                echo "attached volume: $VOLUME_ID"
+
+                # aws ec2 describe-volumes \
+                #   --region '${AWS::Region}' \
+                #   --filters 'Name=tag:StackId,Values="${AWS::StackId}"' \
+                #   --query 'Volumes[*].{ID:VolumeId}'
 
             "/usr/local/bin/sync-and-alert.sh":
               mode: "000755"
