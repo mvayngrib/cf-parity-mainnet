@@ -27,13 +27,14 @@ services:
     environment:
       ETH_NETWORK: ropsten
       ETH_INDEXER_HOST: eth-indexer:3000
-      ETH_INDEXER_API_KEY: blah
+      PARITY_HOST: parity:8545
+      API_KEY: blah
 
   eth-indexer:
     image: '404247308186.dkr.ecr.us-east-1.amazonaws.com/eth-indexer:latest'
     environment:
       NODE_NETWORK: ropsten
-      NODE_HOST: parity
+      NODE_HOSTNAME: localhost
       NODE_PORT: 3000
       NODE_USE_WS: 'false'
       START_BLOCK: 3000000

@@ -4,7 +4,7 @@ set -e
 if [ -n "$S3_PATH_TO_API_KEY" ]
 then
   echo "loading api key from $S3_PATH_TO_API_KEY"
-  export ETH_INDEXER_API_KEY=$(aws s3 cp "s3://$S3_PATH_TO_API_KEY" -)
+  export API_KEY=$(aws s3 cp "s3://$S3_PATH_TO_API_KEY" -)
   # aws s3 cp $S3_PATH_TO_API_KEY /etc/nginx/conf.d/template.conf
 else
   echo "\$S3_PATH_TO_API_KEY not set, did you mean for this API to be open to the internet?"

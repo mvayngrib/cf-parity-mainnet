@@ -174,11 +174,13 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: nginx-proxy
           Environment:
-            - Name: 'ETH_INDEXER_HOST'
+            - Name: ETH_INDEXER_HOST
               Value: eth-indexer:3000
-            - Name: 'S3_PATH_TO_API_KEY'
+            - Name: PARITY_HOST
+              Value: parity:8545
+            - Name: S3_PATH_TO_API_KEY
               Value: !Ref IndexerAPIKeyS3Path
-            - Name: 'ETH_NETWORK'
+            - Name: ETH_NETWORK
               Value: !Ref NetworkName
 
         - Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ParityClientRepositoryName}:latest
@@ -237,10 +239,12 @@ Resources:
           Environment:
             - Name: 'NODE_NETWORK'
               Value: !Ref NetworkName
-            - Name: 'NODE_HOST'
+            - Name: 'NODE_HOSTNAME'
               Value: 'parity'
-            - Name: 'NODE_PORT'
-              Value: '3000'
+            - Name: 'NODE_HTTP_PORT'
+              Value: '8545'
+            # - Name: 'NODE_WS_PORT'
+            #   Value: '8546'
             # - Name: 'SERVER_BASE_PATH'
             #   Value: !Ref Path
             # gets stuck periodically otherwise
