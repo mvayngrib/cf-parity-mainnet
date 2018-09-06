@@ -50,5 +50,9 @@
   {
     "ParameterKey": "IndexerAPIKeyS3Path",
     "ParameterValue": "mvayngrib-serverless-deployment/eth-indexer-api-key"
+  },
+  {
+    "ParameterKey": "DNSName",
+    "ParameterValue": "eth-parity-ropsten2.mvayngrib.com"
   }
 ]

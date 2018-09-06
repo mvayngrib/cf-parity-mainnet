@@ -247,6 +247,7 @@ Parameters:
 Conditions:
   Syncing: !Equals [ !Ref ChainSnapshotId, ""]
   SSHAccess: !Not [!Equals [ !Ref KeyName, ""]]
+  RegisterDNS: !Not [!Equals [ !Ref DNSName, ""]]
 
 Resources:
   VPC:
@@ -349,14 +350,27 @@ Resources:
 
   # DNS:
   #   Type: AWS::CloudFormation::Stack
-  #   DependsOn: Ethereum
+  #   Condition: RegisterDNS
+  #   DependsOn:
+  #     - Ethereum
+  #     - ECS
   #   Properties:
-  #     TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/dns.yml
+  #     TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/dns-old.yml
   #     Parameters:
   #       Namespace: !Ref Namespace
   #       DNSName: !Ref DNSName
-  #       ECSCluster: !Ref ECSCluster
   #       ChainSnapshotId: !Ref ChainSnapshotId
+  #       ECSCluster: !GetAtt ECS.Outputs.Cluster
+
+  DNSAlias:
+    Type: AWS::CloudFormation::Stack
+    Condition: RegisterDNS
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${S3TemplatesPath}/dns.yml
+      Parameters:
+        DNSName: !Ref DNSName
+        AliasedHostedZoneId: !GetAtt ALB.Outputs.CanonicalHostedZoneNameID
+        AliasedDNSName: !GetAtt ALB.Outputs.LoadBalancerUrl
 
 Outputs:
   VPC:

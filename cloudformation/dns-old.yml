@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: DNS for parity ECS stack
+Parameters:
+  Namespace:
+    Type: String
+
+  DNSName:
+    Type: String
+
+  ECSCluster:
+    Type: String
+
+  # optional
+  ChainSnapshotId:
+    Type: String
+
+Resources:
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DNSName
+
+  UpdateDNSLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: mvayngrib-serverless-deployment
+        S3Key: !Sub ${Namespace}/lambda.zip
+      FunctionName: !Sub ${Namespace}-update-dns
+      Handler: functions/update-dns.handler
+      MemorySize: 128
+      Role:
+        Fn::GetAtt:
+          - UpdateDNSLambdaExecutionRole
+          - Arn
+      Runtime: nodejs8.10
+      Timeout: 60
+
+  UpdateDNSLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: '/'
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+            - ec2:*
+            - ecs:*
+            - route53:*
+            Resource: '*'
+
+  UpdateDNSLambdaLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-${AWS::Region}-update-dns
+      RetentionInDays: 3
+
+  DNSUpdater:
+    Type: Custom::DNSUpdater
+    Properties:
+      ServiceToken: !GetAtt UpdateDNSLambda.Arn
+      cluster: !Ref ECSCluster
+      hostedZone: !Ref HostedZone
+      dnsName: !Ref DNSName
+      snapshotId: !Ref ChainSnapshotId

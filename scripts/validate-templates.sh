@@ -8,6 +8,7 @@ ERROR_COUNT=0;
 echo "Validating AWS CloudFormation templates..."
 
 # Loop through the YAML templates in this repository
+# TODO: validate in parallel
 for TEMPLATE in $(find cloudformation -name '*.yml'); do
 
   # Validate the template with CloudFormation
