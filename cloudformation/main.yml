@@ -388,6 +388,15 @@ Outputs:
   EthECSService:
     Value: !GetAtt Ethereum.Outputs.ECSService
 
+  VPC:
+    Value: !GetAtt VPC.Outputs.VPC
+
+  BastionHost:
+    Value: !GetAtt BastionHost.Outputs.PublicDNSName
+
+  BastionPublicIP:
+    Value: !GetAtt BastionHost.Outputs.PublicIP
+
   # JsonRpcDNSName:
   #   Description: indexer DNS name
   #   Value: !GetAtt Ethereum.Outputs.JsonRpcDNSName

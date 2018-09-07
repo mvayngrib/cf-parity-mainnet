@@ -237,6 +237,8 @@ Resources:
           Links:
             - parity
           Environment:
+            - Name: 'DATA_DIR'
+              Value: /root/.eth-indexer/
             - Name: 'NODE_NETWORK'
               Value: !Ref NetworkName
             - Name: 'NODE_HOSTNAME'

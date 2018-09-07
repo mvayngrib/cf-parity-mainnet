@@ -32,6 +32,10 @@ then
     --capabilities CAPABILITY_NAMED_IAM \
     --disable-rollback \
     --timeout 120000
+
+  echo "waiting for stack to finish creating..."
+  aws cloudformation wait stack-create-complete \
+    --stack-name "$STACK_NAME"
 else
   echo "creating stack $STACK_NAME"
   aws cloudformation update-stack \
@@ -39,4 +43,9 @@ else
     --template-body "file://$CUR_DIR/cloudformation/main.yml" \
     --parameters "$PARAMETERS" \
     --capabilities CAPABILITY_NAMED_IAM
+
+  echo "waiting for stack to finish updating..."
+  aws cloudformation wait stack-update-complete \
+    --stack-name "$STACK_NAME"
 fi
+

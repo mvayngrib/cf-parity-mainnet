@@ -5,6 +5,9 @@ Parameters:
   KeyName:
     Type: String
 
+  # VPC:
+  #   Type: AWS::EC2::VPC::Id
+
   SecurityGroup:
     Type: String
 
@@ -68,3 +71,6 @@ Outputs:
 
   PublicDNSName:
     Value: !GetAtt Instance.PublicDnsName
+
+  PublicIP:
+    Value: !GetAtt Instance.PublicIp
