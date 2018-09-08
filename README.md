@@ -59,7 +59,8 @@ Misc: the stack can optionally take a snapshot of the data volume after the firs
 ## current limitations 
 - We do not have 100% automation yet when switching from the initial sync mode. 
 - For security reasons we only proxy a small whitelist of JSON-RPCs from Indexer into the Ethereum node. This list can be extended later. 
-- We do not have an integration into MyCloud stack yet.
-- Detect that the node got stuck, kill it, and start with the snapshot.
+- It is a separate stack. We do not have an integration into MyCloud stack yet.
 - Add snapshots on a regular basis so that you can start from the last working one and catch up to the latest blocks quickly.
+- Detect that the node got stuck, kill it, and restart with the lastest snapshot.
+
 
