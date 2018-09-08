@@ -1,3 +1,26 @@
+## To node or not to node
+It is surprisingly hard to run your own Ethereum node. This is why many blockchain-based apps (DApps) defer to someone else running a node for them, e.g. Etherscan or Infura. Yet, if you run an application which, for the life of it depends on the blockchain, you have to live with trusting those third-party services. You will never know if they fed you the wrong transactions, or even the wrong blockchain. Not because they turned evil, may be they were comprormised. Now all their clients get compromised too. This defeats the purpose of the blockchain, which is to eliminate centralized intermediaries.
+
+It is surprisingly hard to run your own Ethereum node. This is why we set out to fully automate the process so that our customers
+
+1. can run the node themselves, with close to zero maintenance
+2. run it at the lowest cost possible
+
+## Problems we needed to solve
+
+- **Initial sync**. When it starts, it must catch up with all the transactions since the genesis block. It loads all blocks from other nodes on the network that it can find. Try this on a decent Macbook Pro and after 3 days of that node trying to sync with the Ethereum network, you will give up. Not only it is slow, the node sometimes gets stuck and you do not know why. To optimize the sync we run a decent AWS instance (c5.large) with an attached EBS drive with greatly increased IOPS (2500). This baby syncs in about 22 hours (as of September 2018). Then snapshot the EBS drive, downgrade the machine to a smaller one (t2.medium), and start EBS with lower IOPS. This way the node will cost you about $100 a month to run.
+
+- **Choosing the software**. Two most popular implementations of Ethereum node (called client) are Geth and Parity. Neither is sufficiently stable. Parity sometimes locks up and needs restarting. Geth corrupts its database once in a while. And this is just trouble without updating their software.
+
+- **Networking**. Ethereum node works behind the firewall. Specifically you do not need to open any ports. But if you do not, the speed of syncing suffers greatly as it can only talk to the public nodes, and the majority of nodes on the Ethereum network are not public. In addition, if you are running a node in production environment, you do not want any surprises, so you need to isolate it from the rest of the stack. This is where AWS VPC (software defined network) comes in.
+
+## Not enough functionality 
+Ethereum node provided JSON-RPC interface that allows basic queries of the database, which it creates when loading all the blocks. We needed other queries against this database, but there is not mechanism to add additional indexes for such queries not to run for hours.
+
+Specifically at this point we need to get all transactions for a specific address. In the future we may need other queries.
+
+We had no choice but to repeat the work of reading ALL the blocks again. We run a separate container and talk an Ethereum node, running in a separate container, via its JSON-RPC. As we read the blocks we index them into a leveldb database. We also defined REST API to query this index, and for that we are running nginx container. We also proxy all the rest of JSON-RPC calls from this REST API into an Ethereum node. It takes about 3 hours (in the Ethereum state as of September 2018) to load this index.
+
 ## Cloudformation Stack for Ethereum Parity Node
 
 We evaluated several options for running an Ethereum node in the cloud. The criteria we considered were:
