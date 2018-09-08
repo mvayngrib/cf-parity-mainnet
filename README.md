@@ -19,7 +19,7 @@ Ethereum node provided JSON-RPC interface that allows basic queries of the datab
 
 Specifically at this point we need to get all transactions for a specific address. In the future we may need other queries.
 
-We had no choice but to repeat the work of reading ALL the blocks again. We run a separate container and talk an Ethereum node, running in a separate container, via its JSON-RPC. As we read the blocks we index them into a leveldb database. We also defined REST API to query this index, and for that we are running nginx container. We also proxy all the rest of JSON-RPC calls from this REST API into an Ethereum node. It takes about 3 hours (in the Ethereum state as of September 2018) to load this index.
+We had no choice but to repeat the work of reading ALL the blocks again. We run a separate container and talk an Ethereum node, running in a separate container, via its JSON-RPC. As we read the blocks we index them into a leveldb database. We also defined REST API to query this indexand proxy all the rest of JSON-RPC calls into an Ethereum node, so it is a superset of normal Ethereum JSON-RPC interface. It takes about 3 hours (in the Ethereum state as of September 2018) to load this index.
 
 ## Cloudformation Stack for Ethereum Parity Node
 
@@ -30,7 +30,7 @@ We evaluated several options for running an Ethereum node in the cloud. The crit
 - how to enable automatic or one-click updates?
 - how to secure the node?
 
-We looked at several solutions, including AWS's Blockchain Templates and an open source solution created by a group called Rumble Fish Blockchain Development, and came up with a hybrid.
+We looked at several solutions, including [AWS's Blockchain Templates](https://aws.amazon.com/blockchain/templates/) and an [open source solution created by a group called Rumble Fish Blockchain Development](https://www.rumblefishdev.com/how-to-run-ethereum-mainnet-node-on-aws/), and came up with a hybrid.
 
 The AWS Blockchain Templates were quite sophisticated, but it wasn't clear how they managed the chain data, and how to set up "checkpointing," in case of failures. They also used a custom AWS docker images for the Ethereum client; we'd rather use the ones provided by the Geth and Parity communities.
 
