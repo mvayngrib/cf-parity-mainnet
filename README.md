@@ -59,5 +59,6 @@ Misc: the stack can optionally take a snapshot of the data volume after the firs
 ## current limitations 
 - We do not have 100% automation yet when switching from the initial sync mode. 
 - For security reasons we only proxy a small whitelist of JSON-RPCs from Indexer into the Ethereum node. This list can be extended later. 
+- We do not have an integration into MyCloud stack yet. 
 
 
