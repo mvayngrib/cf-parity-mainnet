@@ -19,7 +19,7 @@ Ethereum node provided JSON-RPC interface that allows basic queries of the datab
 
 Specifically at this point we need to get all transactions for a specific address. In the future we may need other queries.
 
-We had no choice but to repeat the work of reading ALL the blocks again. We run a separate container and talk an Ethereum node, running in a separate container, via its JSON-RPC. As we read the blocks we index them into a leveldb database. We also defined REST API to query this indexand proxy all the rest of JSON-RPC calls into an Ethereum node, so it is a superset of normal Ethereum JSON-RPC interface. It takes about 3 hours (in the Ethereum state as of September 2018) to load this index.
+We had no choice but to repeat the work of reading ALL the blocks again. We run a separate container and talk an Ethereum node, running in a separate container, via its JSON-RPC. As we read the blocks we index them into a leveldb database. We also defined REST API to query this index and proxy a subset of JSON-RPC calls into an Ethereum node, so it is a superset of normal Ethereum JSON-RPC interface. It takes about 3 hours (in the Ethereum state as of September 2018) to load this index.
 
 ## Cloudformation Stack for Ethereum Parity Node
 
