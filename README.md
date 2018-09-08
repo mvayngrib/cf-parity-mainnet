@@ -38,7 +38,7 @@ The AWS Blockchain Templates were quite sophisticated, but it wasn't clear how t
 
 The Rumble Fish templates were simpler to understand, but launched in the default VPC, didn't create networking infrastructure necessary for isolating things for security, and was designed to scale with the help of an additional cloudformation stack more specific to their use case.
 
-The result is a cloudformation stack that uses Elastic Container Service to deploy one or more containerized parity nodes behind a load balancer inside a VPC. An additional container runs alongside to build the additional indexes MyCloud needs to query. For extra security, the node itself is accessible only to the Indexer. This way you know, that no other DApp is munching off of you, and you are prorected from DDOS. The Indexer's REST API sits behind an nginx container that can be configured to check an Authorization header for an API key.
+The result is a cloudformation stack that uses Elastic Container Service to deploy one or more containerized parity nodes behind a load balancer inside a VPC. An additional container runs alongside to build the additional indexes MyCloud needs to query. For extra security, the node itself is accessible only to the Indexer. This way you know, that no other DApp is munching off of your Ethereum node, which costs you money to run, and that it is fully protected from DDOS. The Indexer's REST API sits behind an nginx container that can be configured to check an Authorization header for an API key.
 
 ###The stack has several nested stacks
 - VPC stack with 2 public and 2 private subnets
