@@ -1,5 +1,5 @@
 ## To node or not to node
-It is surprisingly hard to run your own Ethereum node. This is why many blockchain-based apps (DApps) defer to someone else running a node for them, e.g. Etherscan or Infura. Yet, if you run an application which, for the life of it depends on the blockchain, you have to live with trusting those third-party services. You will never know if they fed you the wrong transactions, or even the wrong blockchain. Not because they turned evil, may be they were comprormised. Now all their clients get compromised too. This defeats the purpose of the blockchain, which is to eliminate centralized intermediaries.
+It is surprisingly hard to run your own Ethereum node. This is why many blockchain-based apps (DApps) defer to someone else running a node for them, e.g. [Etherscan](https://etherscan.io/) or [Infura](https://infura.io/). Yet, if you run an application which, for the life of it depends on the blockchain, you have to live with trusting those third-party services. You will never know if they fed you the wrong transactions, or even the wrong blockchain. Not because they turned evil, may be they were comprormised. All of a sudden, all their clients get compromised too. This defeats the purpose of the blockchain, which is to eliminate centralized intermediaries.
 
 It is surprisingly hard to run your own Ethereum node. This is why we set out to fully automate the process so that our customers
 
@@ -8,9 +8,9 @@ It is surprisingly hard to run your own Ethereum node. This is why we set out to
 
 ## Problems we needed to solve
 
-- **Initial sync**. When it starts, it must catch up with all the transactions since the genesis block. It loads all blocks from other nodes on the network that it can find. Try this on a decent Macbook Pro and after 3 days of that node trying to sync with the Ethereum network, you will give up. Not only it is slow, the node sometimes gets stuck and you do not know why. To optimize the sync we run a decent AWS instance (c5.large) with an attached EBS drive with greatly increased IOPS (2500). This baby syncs in about 22 hours (as of September 2018). Then snapshot the EBS drive, downgrade the machine to a smaller one (t2.medium), and start EBS with lower IOPS. This way the node will cost you about $100 a month to run.
+- **Initial sync**. When it starts, it must catch up with all the transactions since the genesis block. It loads all blocks from the other nodes on the network that it can find. Try this on a decent Macbook Pro and after 3 days of that node trying to sync with the blockchain network, you will give up. Not only it is slow, the node sometimes gets stuck and you do not know why. To optimize the sync we run a decent AWS instance (c5.large) with an attached EBS drive with greatly increased IOPS (2500 per second). This baby syncs in about 22 hours (as of September 2018). Then we snapshot the EBS drive, downgrade the machine to a smaller one (t2.medium), and create EBS volume from a snapshot with a lower IOPS. This way the node will sync fast and will cost you only about $100 a month to run.
 
-- **Choosing the software**. Two most popular implementations of Ethereum node (called client) are Geth and Parity. Neither is sufficiently stable. Parity sometimes locks up and needs restarting. Geth corrupts its database once in a while. And this is just trouble without updating their software.
+- **Choosing the software**. Two most popular implementations of Ethereum node (called client) are Geth and Parity. Neither is sufficiently stable. We do not know all the conditions whent they lock up and when they corrupt their databases. But it happens and we need a managable solution to address this problem. And this is just the trouble without updating their software.
 
 - **Networking**. Ethereum node works behind the firewall. Specifically you do not need to open any ports. But if you do not, the speed of syncing suffers greatly as it can only talk to the public nodes, and the majority of nodes on the Ethereum network are not public. In addition, if you are running a node in production environment, you do not want any surprises, so you need to isolate it from the rest of the stack. This is where AWS VPC (software defined network) comes in.
 
@@ -59,6 +59,7 @@ Misc: the stack can optionally take a snapshot of the data volume after the firs
 ## current limitations 
 - We do not have 100% automation yet when switching from the initial sync mode. 
 - For security reasons we only proxy a small whitelist of JSON-RPCs from Indexer into the Ethereum node. This list can be extended later. 
-- We do not have an integration into MyCloud stack yet. 
-
+- We do not have an integration into MyCloud stack yet.
+- Detect that the node got stuck, kill it, and start with the snapshot.
+- Add snapshots on a regular basis so that you can start from the last working one and catch up to the latest blocks quickly.
 
