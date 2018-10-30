@@ -29,3 +29,33 @@ The stack is parametrized. It can be launched against ropsten or kovan. The unde
 The modularization of the stack into multiple components makes for something easier to understand, with reusable parts.
 
 Misc: the stack can optionally take a snapshot of the data volume after the first sync and notify the admin. This provides a kind of "checkpoint" to come back to in case something goes wrong.
+
+## Todo
+
+the big problem is attaching the data volume on a new instance's start, when it might already be taken by the instance we are replacing. Normally, to prevent downtime, the new instance needs to be up before the old one is taken down.
+
+### Goals for auto-scaling
+- survice
+- don't fall too far behind the chain (i.e. don't use an old snapshot)
+- minimize downtime
+
+### Ideas
+- on start, create a snapshot from the running instance's volume, create a new volume, attach it, initialize it, sync.
+
+### Questions
+
+if during auto-scaling, the new instance is in a different AZ, it'll need to attach to a different EBS volume than the running instance
+
+### Reading Material
+
+initializing volume faster:
+https://stackoverflow.com/questions/46284897/optimize-big-ebs-volumes-initialization-warm-up
+
+lifecycle hooks:
+https://linuxacademy.com/blog/amazon-web-services-2/understand-lifecycle-hooks/
+  
+  maybe using lifecycle hooks we could catch the 2nd instance starting up, and shut down the first instance before letting the 2nd proceeed (so that the 2nd can connect to the volume)
+
+what about availability zones? What if 2nd instance starts in another availability zone
+
+need
