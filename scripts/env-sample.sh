@@ -1,3 +1,4 @@
-AWS_PROFILE=default
-STACK_NAME=MainnetParity1
-BUCKET=my-lambda-code-bucket
+export AWS_PROFILE=mv
+export NETWORK=ropsten
+export STACK_NAME="parity-ropsten-2"
+export BUCKET=mvayngrib-serverless-deployment

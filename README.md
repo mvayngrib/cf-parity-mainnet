@@ -92,3 +92,14 @@ https://linuxacademy.com/blog/amazon-web-services-2/understand-lifecycle-hooks/
   maybe using lifecycle hooks we could catch the 2nd instance starting up, and shut down the first instance before letting the 2nd proceeed (so that the 2nd can connect to the volume)
 
 what about availability zones? What if 2nd instance starts in another availability zone
+
+## Development
+
+1. copy `scripts/env-sample.sh` -> `scripts/env.sh` and adjust per your environment
+1. `scripts/build_and_upload.sh [repo-name] [path-to-Dockerfile]` will build the image and push it to ECR
+1. `scripts/create-or-update-stack.sh` - validate + upload cloudformation templates, and create/update your Ethereum stack
+
+### Utils
+
+- `scripts/restart-task.sh` will force the ECS task to restart, picking up any new image you pushed to ECR
+1. `scripts/delete-and-create-stack.sh` - just what it says :)
